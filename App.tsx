@@ -690,7 +690,8 @@ const App: React.FC = () => {
             date: new Date().toISOString().split('T')[0],
             averiaDate: new Date().toISOString().split('T')[0]
         },
-        loadedFileName: undefined
+        // Preserve loadedFileName so user knows which resources are active
+        loadedFileName: prev.loadedFileName
     }));
     setSelectedRowId(null);
     setActiveSearch(null);
