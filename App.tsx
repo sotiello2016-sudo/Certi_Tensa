@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   FileSpreadsheet, 
@@ -283,6 +284,8 @@ const App: React.FC = () => {
 
   // Inline Search State
   const [activeSearch, setActiveSearch] = useState<{ rowId: string, field: 'code' | 'description' } | null>(null);
+  // Dropdown placement state: 'bottom' (default) or 'top' (if close to screen bottom)
+  const [dropdownPlacement, setDropdownPlacement] = useState<'bottom' | 'top'>('bottom');
   
   // Editing Cell State for View/Edit mode switching (Price column)
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
@@ -312,8 +315,9 @@ const App: React.FC = () => {
 
   // --- AUTO-SCROLL FOR DROPDOWN VISIBILITY ---
   useEffect(() => {
-    // Only run if we have an active search and the dropdown is rendered
-    if (activeSearch && dropdownRef.current && tableContainerRef.current) {
+    // Only run if we have an active search AND the placement is 'bottom'.
+    // If it's 'top', we don't need to scroll down.
+    if (activeSearch && dropdownRef.current && tableContainerRef.current && dropdownPlacement === 'bottom') {
         const timer = setTimeout(() => {
             if (!dropdownRef.current || !tableContainerRef.current) return;
 
@@ -333,7 +337,7 @@ const App: React.FC = () => {
         }, 50); // Small delay to ensure DOM paint
         return () => clearTimeout(timer);
     }
-  }, [activeSearch, state.items]); // Re-run when search activates or results change (changing height)
+  }, [activeSearch, state.items, dropdownPlacement]); 
 
   // Focus margin input when dialog opens
   useEffect(() => {
@@ -1331,6 +1335,14 @@ const App: React.FC = () => {
         i.description.toLowerCase().includes(lowerTerm)
       );
   };
+  
+  // Calculate Dropdown Placement based on screen position
+  const calculateDropdownPlacement = (target: HTMLElement) => {
+      const rect = target.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // If less than 300px space below, position upwards
+      setDropdownPlacement(spaceBelow < 300 ? 'top' : 'bottom');
+  };
 
   // SAFEGUARD: If state is null (e.g. during heavy operations or initialization glitches), do not render
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
@@ -1911,13 +1923,14 @@ const App: React.FC = () => {
                                 setSelectedRowId(item.id);
                                 setActiveSearch({ rowId: item.id, field: 'code' });
                                 adjustTextareaHeight(e);
+                                calculateDropdownPlacement(e.target); // Calculate position on focus
                             }}
                             onBlur={handleInputBlur}
                             placeholder="Buscar..."
                         />
                         {/* Dropdown de búsqueda */}
                         {activeSearch?.rowId === item.id && activeSearch.field === 'code' && item.code.length > 0 && (
-                             <div ref={dropdownRef} className="absolute top-full left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm mt-1">
+                             <div ref={dropdownRef} className={`absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm ${dropdownPlacement === 'top' ? 'bottom-full mb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : 'top-full mt-1'}`}>
                                  {getInlineSearchResults(item.code).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-800">{res.code}</span>
@@ -1948,13 +1961,14 @@ const App: React.FC = () => {
                                 setSelectedRowId(item.id);
                                 setActiveSearch({ rowId: item.id, field: 'description' });
                                 adjustTextareaHeight(e);
+                                calculateDropdownPlacement(e.target); // Calculate position on focus
                             }}
                             onBlur={handleInputBlur}
                             placeholder="Descripción..."
                         />
                          {/* Dropdown de búsqueda */}
                          {activeSearch?.rowId === item.id && activeSearch.field === 'description' && item.description.length > 1 && (
-                             <div ref={dropdownRef} className="absolute top-full left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm mt-1">
+                             <div ref={dropdownRef} className={`absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm ${dropdownPlacement === 'top' ? 'bottom-full mb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : 'top-full mt-1'}`}>
                                  {getInlineSearchResults(item.description).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-500">{res.code}</span>
