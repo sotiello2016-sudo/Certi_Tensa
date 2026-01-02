@@ -1,15 +1,18 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { BudgetItem, ProjectInfo } from "../types";
 
 export const getProjectAnalysis = async (items: BudgetItem[], project: ProjectInfo) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Use process.env.API_KEY as mandated by guidelines.
+  // This also resolves the "Property 'env' does not exist on type 'ImportMeta'" error.
+  const apiKey = process.env.API_KEY || '';
+  
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   
   const summaryData = items.map(item => ({
     desc: item.description,
     planned: item.plannedQuantity,
     total: item.totalQuantity,
-    percent: (item.totalQuantity / item.plannedQuantity) * 100
+    percent: item.plannedQuantity ? (item.totalQuantity / item.plannedQuantity) * 100 : 0
   }));
 
   const prompt = `Analiza el estado de esta certificación de obra para el proyecto "${project.name}". 
@@ -35,6 +38,6 @@ export const getProjectAnalysis = async (items: BudgetItem[], project: ProjectIn
     return response.text;
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    return "No se pudo generar el análisis automático en este momento.";
+    return "No se pudo generar el análisis automático en este momento. Verifique su clave API.";
   }
 };
