@@ -649,8 +649,12 @@ const App: React.FC = () => {
 
   // --- CLEAR ALL LOGIC ---
   const handleClearAll = () => {
-    // Enable clear if items exist OR if averia data is present
-    if (state.items.length === 0 && !state.projectInfo.isAveria) return;
+    // Enable clear if items exist OR if general info exists OR if averia data is present
+    const hasItems = state.items.length > 0;
+    const hasAveria = state.projectInfo.isAveria;
+    const hasInfo = !!(state.projectInfo.name || state.projectInfo.projectNumber || state.projectInfo.orderNumber || state.projectInfo.client);
+    
+    if (!hasItems && !hasAveria && !hasInfo) return;
     setShowClearDialog(true);
   };
 
@@ -665,12 +669,9 @@ const App: React.FC = () => {
         items: [],
         checkedRowIds: new Set(),
         projectInfo: {
-            ...prev.projectInfo,
-            // Reset Averia specific fields
-            isAveria: false,
-            averiaNumber: "",
-            averiaDescription: "",
-            averiaTiming: "diurna",
+            ...INITIAL_PROJECT_INFO,
+            // Ensure date is fresh
+            date: new Date().toISOString().split('T')[0],
             averiaDate: new Date().toISOString().split('T')[0]
         }
     }));
@@ -1560,9 +1561,9 @@ const App: React.FC = () => {
 
                  <button 
                      onClick={handleClearAll}
-                     disabled={state.items.length === 0 && !state.projectInfo.isAveria}
+                     disabled={state.items.length === 0 && !state.projectInfo.isAveria && !state.projectInfo.name && !state.projectInfo.projectNumber && !state.projectInfo.orderNumber && !state.projectInfo.client}
                      className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors ml-2"
-                     title="Borrar todas las filas de la certificación"
+                     title="Borrar todos los datos de la certificación (filas y cabecera)"
                  >
                      <Eraser className="w-4 h-4" />
                      Limpiar
@@ -2219,14 +2220,15 @@ const App: React.FC = () => {
                         </div>
                         
                         <p className="text-slate-600 leading-relaxed mb-6">
+                            Se borrarán <strong>todos los datos generales</strong> de la obra (Cliente, Nº Obra, etc).<br/>
                             {state.items.length > 0 && (
-                                <>Está a punto de eliminar <strong>{state.items.length} partidas</strong> de la certificación actual.<br/></>
+                                <>También se eliminarán <strong>{state.items.length} partidas</strong> de la lista.<br/></>
                             )}
                             {state.projectInfo.isAveria && (
-                                <>Se borrarán los datos de <strong>Avería</strong>.<br/></>
+                                <>Se restablecerán los datos de <strong>Avería</strong>.<br/></>
                             )}
                             <br/>
-                            Esta acción dejará la hoja completamente vacía.
+                            Esta acción dejará la hoja completamente limpia.
                         </p>
 
                         <div className="flex gap-3 justify-end">
