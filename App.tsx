@@ -28,7 +28,8 @@ import {
   Minus,
   Divide,
   X as XIcon,
-  Equal
+  Equal,
+  Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -927,13 +928,13 @@ const App: React.FC = () => {
         doc.text(projectInfo.averiaNumber || '', margin + 22, yPos);
 
         // Fecha Avería
-        const col2X = margin + 60;
+        const col2X = margin + 55;
         doc.setTextColor(...redColor);
         doc.setFont("helvetica", "bold");
-        doc.text("FECHA:", col2X, yPos);
+        doc.text("FECHA AVERÍA:", col2X, yPos);
         doc.setTextColor(0);
         doc.setFont("helvetica", "normal");
-        doc.text(projectInfo.averiaDate ? new Date(projectInfo.averiaDate).toLocaleDateString() : '', col2X + 15, yPos);
+        doc.text(projectInfo.averiaDate ? new Date(projectInfo.averiaDate).toLocaleDateString() : '', col2X + 28, yPos);
 
         // Horario
         const col3X = margin + 110;
@@ -1730,7 +1731,18 @@ const App: React.FC = () => {
                               </div>
                           </div>
                           <div className="col-span-2">
-                               <label className="block text-xs font-bold text-red-600 uppercase mb-1">Horario</label>
+                               <div className="flex items-center gap-1 mb-1">
+                                    <label className="block text-xs font-bold text-red-600 uppercase">Horario</label>
+                                    <div className="group relative">
+                                        <Info className="w-3.5 h-3.5 text-red-400 cursor-help" />
+                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-60 bg-slate-800 text-white text-xs p-2.5 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed border border-slate-600">
+                                            <div className="font-bold border-b border-slate-600 pb-1 mb-1 text-slate-200">Definición de Horarios</div>
+                                            <p className="mb-1"><span className="text-orange-300 font-semibold">Diurno (K=1,25):</span> Lunes a Viernes laborables de 07:00 a 19:00h.</p>
+                                            <p><span className="text-indigo-300 font-semibold">Nocturno/Finde (K=1,75):</span> Resto de horas, fines de semana y festivos.</p>
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-800"></div>
+                                        </div>
+                                    </div>
+                               </div>
                                <div className="relative">
                                    <Clock className="w-4 h-4 absolute left-2 top-2.5 text-red-300" />
                                    <select 
