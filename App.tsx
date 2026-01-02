@@ -52,6 +52,8 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
   averiaTiming: "diurna"
 };
 
+const STORAGE_KEY = 'certipro_autosave_v1';
+
 // Selection State Interface
 interface SelectionState {
     start: { r: number; c: number } | null;
@@ -199,15 +201,49 @@ const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
 const App: React.FC = () => {
   // --- STATE ---
-  // Now includes checkedRowIds inside the main state for History tracking
-  const [state, setState] = useState<AppState>({
-    masterItems: [],
-    items: [],
-    projectInfo: INITIAL_PROJECT_INFO,
-    isLoading: false,
-    checkedRowIds: new Set()
+  // Lazy initialization logic for Autosave
+  const [state, setState] = useState<AppState>(() => {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Rehydrate Set from Array
+            return {
+                ...parsed,
+                // Ensure checkedRowIds is a Set
+                checkedRowIds: new Set(Array.isArray(parsed.checkedRowIds) ? parsed.checkedRowIds : []),
+                isLoading: false // Always reset loading
+            };
+        }
+    } catch (e) {
+        console.error("Failed to load autosave", e);
+    }
+    // Fallback if no save found
+    return {
+        masterItems: [],
+        items: [],
+        projectInfo: INITIAL_PROJECT_INFO,
+        isLoading: false,
+        checkedRowIds: new Set()
+    };
   });
   
+  // --- AUTOSAVE EFFECT ---
+  useEffect(() => {
+     if (!state) return;
+     try {
+         const stateToSave = {
+             ...state,
+             // Serialize Set to Array for JSON storage
+             checkedRowIds: Array.from(state.checkedRowIds || new Set()),
+             isLoading: false
+         };
+         localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+     } catch (e) {
+         console.error("Failed to autosave", e);
+     }
+  }, [state]);
+
   // History State
   const [history, setHistory] = useState<{ past: AppState[], future: AppState[] }>({
       past: [],
