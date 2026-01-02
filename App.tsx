@@ -1324,10 +1324,11 @@ const App: React.FC = () => {
   const getInlineSearchResults = (term: string) => {
       if (!term || term.length < 2 || !state) return [];
       const lowerTerm = term.toLowerCase();
+      // REMOVED .slice(0, 10) to show all results as requested
       return state.masterItems.filter(i => 
         i.code.toLowerCase().includes(lowerTerm) || 
         i.description.toLowerCase().includes(lowerTerm)
-      ).slice(0, 10);
+      );
   };
 
   // SAFEGUARD: If state is null (e.g. during heavy operations or initialization glitches), do not render
