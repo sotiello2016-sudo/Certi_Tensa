@@ -524,14 +524,21 @@ const App: React.FC = () => {
                   saveHistory(state);
               }
 
+              // Determine if we should preserve current master items
+              const hasLocalMasterItems = state.masterItems && state.masterItems.length > 0;
+
               setState({
                   projectInfo: data.projectInfo || INITIAL_PROJECT_INFO,
                   items: Array.isArray(data.items) ? data.items : [],
-                  masterItems: Array.isArray(data.masterItems) ? data.masterItems : (state.masterItems || []), 
+                  // Priority: Local Master Items > Imported Master Items > Empty
+                  masterItems: hasLocalMasterItems 
+                      ? state.masterItems 
+                      : (Array.isArray(data.masterItems) ? data.masterItems : []), 
                   isLoading: false,
                   // Convert Array back to Set safely
                   checkedRowIds: new Set(Array.isArray(data.checkedRowIds) ? data.checkedRowIds : []),
-                  loadedFileName: data.loadedFileName
+                  // Keep filename if keeping master items
+                  loadedFileName: hasLocalMasterItems ? state.loadedFileName : data.loadedFileName
               });
 
           } catch (error) {
