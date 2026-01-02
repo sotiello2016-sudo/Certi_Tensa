@@ -706,7 +706,7 @@ const App: React.FC = () => {
             ["DETALLES DE AVERÍA"],
             ["Nº Avería:", projectInfo.averiaNumber || ''],
             ["Fecha Avería:", projectInfo.averiaDate || ''],
-            ["Horario:", projectInfo.averiaTiming === 'nocturna_finde' ? 'Nocturna / Fin de Semana' : 'Diurna'],
+            ["Horario:", projectInfo.averiaTiming === 'nocturna_finde' ? 'Avería nocturna/ Fin de Semana K=1,75' : 'Avería diurna K=1,25'],
             ["Descripción:", projectInfo.averiaDescription || '']
         );
     }
@@ -942,7 +942,7 @@ const App: React.FC = () => {
         doc.text("HORARIO:", col3X, yPos);
         doc.setTextColor(0);
         doc.setFont("helvetica", "normal");
-        const horario = projectInfo.averiaTiming === 'nocturna_finde' ? 'Nocturna / Fin de Semana' : 'Diurna';
+        const horario = projectInfo.averiaTiming === 'nocturna_finde' ? 'Avería nocturna/ Fin de Semana K=1,75' : 'Avería diurna K=1,25';
         doc.text(horario, col3X + 20, yPos);
 
         yPos += 6;
@@ -1740,8 +1740,8 @@ const App: React.FC = () => {
                                        onBlur={handleInputBlur}
                                        onFocus={handleInputBlur}
                                    >
-                                       <option value="diurna">Diurna</option>
-                                       <option value="nocturna_finde">Nocturna / Fin de Semana</option>
+                                       <option value="diurna">Avería diurna K=1,25</option>
+                                       <option value="nocturna_finde">Avería nocturna/ Fin de Semana K=1,75</option>
                                    </select>
                                    <ChevronDown className="w-4 h-4 absolute right-2 top-2.5 text-red-300 pointer-events-none" />
                                 </div>
