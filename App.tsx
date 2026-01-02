@@ -226,7 +226,8 @@ const App: React.FC = () => {
         items: [],
         projectInfo: INITIAL_PROJECT_INFO,
         isLoading: false,
-        checkedRowIds: new Set()
+        checkedRowIds: new Set(),
+        loadedFileName: undefined
     };
   });
   
@@ -470,7 +471,8 @@ const App: React.FC = () => {
           items: state.items,
           masterItems: state.masterItems,
           // Convert Set to Array for JSON serialization (safely)
-          checkedRowIds: Array.from(state.checkedRowIds || []) 
+          checkedRowIds: Array.from(state.checkedRowIds || []),
+          loadedFileName: state.loadedFileName
       };
 
       const jsonString = JSON.stringify(backupData, null, 2);
@@ -528,7 +530,8 @@ const App: React.FC = () => {
                   masterItems: Array.isArray(data.masterItems) ? data.masterItems : (state.masterItems || []), 
                   isLoading: false,
                   // Convert Array back to Set safely
-                  checkedRowIds: new Set(Array.isArray(data.checkedRowIds) ? data.checkedRowIds : [])
+                  checkedRowIds: new Set(Array.isArray(data.checkedRowIds) ? data.checkedRowIds : []),
+                  loadedFileName: data.loadedFileName
               });
 
           } catch (error) {
@@ -614,6 +617,7 @@ const App: React.FC = () => {
           masterItems: mappedItems, // Update only the Master Items
           // We DO NOT reset items or checkedRowIds here anymore
           isLoading: false,
+          loadedFileName: file.name
         }) : prev);
       } catch (err) {
         console.error(err);
@@ -678,7 +682,8 @@ const App: React.FC = () => {
             // Ensure date is fresh
             date: new Date().toISOString().split('T')[0],
             averiaDate: new Date().toISOString().split('T')[0]
-        }
+        },
+        loadedFileName: undefined
     }));
     setSelectedRowId(null);
     setActiveSearch(null);
@@ -1040,18 +1045,18 @@ const App: React.FC = () => {
             valign: 'middle', // Align headers vertically center
         },
         columnStyles: {
-            0: { cellWidth: 45, fontStyle: 'bold' }, // Recurso INCREASED WIDTH
+            0: { cellWidth: 45, fontStyle: 'normal' }, // Recurso INCREASED WIDTH
             1: { cellWidth: 'auto' }, // Descripción
             2: { cellWidth: 15, halign: 'center' }, // Ud CENTERED
             // Dynamic column index handling for Averia
             ...(isAveria ? {
                 3: { cellWidth: 12, halign: 'center' }, // K CENTERED
                 4: { cellWidth: 25, halign: 'right' }, // Precio RIGHT (WIDER)
-                5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, // Importe RIGHT (WIDER)
+                5: { cellWidth: 28, halign: 'right', fontStyle: 'normal' }, // Importe RIGHT (WIDER)
                 6: { cellWidth: 35, halign: 'left' } // Obs LEFT
             } : {
                 3: { cellWidth: 25, halign: 'right' }, // Precio RIGHT (WIDER)
-                4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, // Importe RIGHT (WIDER)
+                4: { cellWidth: 28, halign: 'right', fontStyle: 'normal' }, // Importe RIGHT (WIDER)
                 5: { cellWidth: 35, halign: 'left' } // Obs LEFT
             })
         },
@@ -1554,24 +1559,66 @@ const App: React.FC = () => {
                      Guardar Trabajo
                  </button>
 
-                 <label 
-                    className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer text-sm font-medium transition-colors ml-4 ${
+                 {/* IMPORT BUTTON WITH INFO ICON */}
+                 <div className={`flex items-center rounded border ml-4 transition-colors ${
                         state.masterItems.length > 0 
-                        ? "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200 shadow-sm" 
+                        ? "bg-emerald-100 border-emerald-300 text-emerald-800 shadow-sm" 
                         : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-                    }`}
-                    title={state.masterItems.length > 0 ? `Tabla de recursos cargada (${state.masterItems.length} elementos)` : "Importar tabla de recursos desde Excel"}
-                 >
-                     <Upload className={`w-4 h-4 ${state.masterItems.length > 0 ? "text-emerald-700" : "text-slate-500"}`} />
-                     {state.masterItems.length > 0 ? "Tabla Rec. (OK)" : "Importar Tabla Rec."}
-                     <input 
-                        type="file" 
-                        className="hidden" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleFileUpload}
-                        onClick={(e) => (e.currentTarget.value = '')}
-                     />
-                 </label>
+                    }`}>
+                     <label 
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm font-medium grow select-none hover:bg-opacity-80 rounded-l"
+                        title={state.masterItems.length > 0 ? `Tabla de recursos cargada (${state.masterItems.length} elementos)` : "Importar tabla de recursos desde Excel"}
+                     >
+                         <Upload className={`w-4 h-4 ${state.masterItems.length > 0 ? "text-emerald-700" : "text-slate-500"}`} />
+                         {state.masterItems.length > 0 ? "Tabla Rec. (OK)" : "Importar Tabla Rec."}
+                         <input 
+                            type="file" 
+                            className="hidden" 
+                            accept=".xlsx, .xls" 
+                            onChange={handleFileUpload}
+                            onClick={(e) => (e.currentTarget.value = '')}
+                         />
+                     </label>
+                     {state.masterItems.length > 0 && (
+                        <button 
+                            className="px-2 py-2 border-l border-emerald-200 hover:bg-emerald-200 text-emerald-700 rounded-r focus:outline-none relative group cursor-help"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                alert(`Archivo de recursos cargado:\n\n📄 ${state.loadedFileName || 'Desconocido'}`);
+                            }}
+                            aria-label="Información del archivo cargado"
+                        >
+                            <Info className="w-4 h-4" />
+                            
+                            {/* NEW TOOLTIP STYLE - MATCHING HORARIO CARD STYLE */}
+                            <div className="absolute right-0 top-full mt-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-top scale-95 group-hover:scale-100 text-left">
+                                <div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2">
+                                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                                    <span className="font-bold text-slate-700 text-sm">Archivo de Recursos</span>
+                                </div>
+                                <div className="p-4">
+                                    <div className="relative pl-3">
+                                            <div className="absolute left-0 top-1.5 w-1 h-8 bg-emerald-500 rounded-full"></div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Excel Cargado</span>
+                                                <p className="text-sm text-slate-600 font-medium break-all leading-tight">
+                                                {state.loadedFileName || 'Desconocido'}
+                                                </p>
+                                            </div>
+                                    </div>
+                                    <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400">Total Registros</span>
+                                            <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold border border-emerald-100">
+                                            {state.masterItems.length} items
+                                            </span>
+                                    </div>
+                                </div>
+                                {/* Arrow pointing UP */}
+                                <div className="absolute bottom-full right-2.5 -mb-2 w-4 h-4 bg-white border-t border-l border-slate-100 transform rotate-45 rounded-sm"></div>
+                            </div>
+                        </button>
+                     )}
+                 </div>
 
                  <button 
                      onClick={handleClearAll}
@@ -1745,13 +1792,37 @@ const App: React.FC = () => {
                           <div className="col-span-2">
                                <div className="flex items-center gap-1 mb-1">
                                     <label className="block text-xs font-bold text-red-600 uppercase">Horario</label>
-                                    <div className="group relative">
-                                        <Info className="w-3.5 h-3.5 text-red-400 cursor-help" />
-                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-60 bg-slate-800 text-white text-xs p-2.5 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed border border-slate-600">
-                                            <div className="font-bold border-b border-slate-600 pb-1 mb-1 text-slate-200">Definición de Horarios</div>
-                                            <p className="mb-1"><span className="text-orange-300 font-semibold">Diurno (K=1,25):</span> Lunes a Viernes laborables de 07:00 a 19:00h.</p>
-                                            <p><span className="text-indigo-300 font-semibold">Nocturno/Finde (K=1,75):</span> Resto de horas, fines de semana y festivos.</p>
-                                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-800"></div>
+                                    <div className="group relative z-10">
+                                        <Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
+                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-bottom scale-95 group-hover:scale-100">
+                                            <div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2">
+                                                <Clock className="w-4 h-4 text-blue-500" />
+                                                <span className="font-bold text-slate-700 text-sm">Horarios y Coeficientes</span>
+                                            </div>
+                                            <div className="p-4 space-y-4">
+                                                <div className="relative pl-3">
+                                                    <div className="absolute left-0 top-1.5 w-1 h-8 bg-orange-400 rounded-full"></div>
+                                                    <div className="flex justify-between items-baseline mb-1">
+                                                        <span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Diurno</span>
+                                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-orange-200">K = 1,25</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                                        Lunes a Viernes laborables<br/>
+                                                        de <span className="font-semibold text-slate-700">07:00</span> a <span className="font-semibold text-slate-700">19:00h</span>.
+                                                    </p>
+                                                </div>
+                                                <div className="relative pl-3">
+                                                    <div className="absolute left-0 top-1.5 w-1 h-8 bg-indigo-500 rounded-full"></div>
+                                                    <div className="flex justify-between items-baseline mb-1">
+                                                        <span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Nocturno / Finde</span>
+                                                        <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-indigo-200">K = 1,75</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                                        Resto de horas, fines de semana y festivos.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-2 w-4 h-4 bg-white border-r border-b border-slate-100 transform rotate-45 rounded-sm"></div>
                                         </div>
                                     </div>
                                </div>

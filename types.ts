@@ -39,4 +39,5 @@ export interface AppState {
   projectInfo: ProjectInfo;
   isLoading: boolean;
   checkedRowIds: Set<string>; // Items currently checked/ticked
+  loadedFileName?: string; // Name of the loaded resources Excel file
 }
