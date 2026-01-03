@@ -311,8 +311,6 @@ const App: React.FC = () => {
 
   // Inline Search State
   const [activeSearch, setActiveSearch] = useState<{ rowId: string, field: 'code' | 'description' } | null>(null);
-  // Dropdown placement state: 'bottom' (default) or 'top' (if close to screen bottom)
-  const [dropdownPlacement, setDropdownPlacement] = useState<'bottom' | 'top'>('bottom');
   
   // Editing Cell State for View/Edit mode switching (Price column)
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
@@ -353,9 +351,8 @@ const App: React.FC = () => {
 
   // --- AUTO-SCROLL FOR DROPDOWN VISIBILITY ---
   useEffect(() => {
-    // Only run if we have an active search AND the placement is 'bottom'.
-    // If it's 'top', we don't need to scroll down.
-    if (activeSearch && dropdownRef.current && tableContainerRef.current && dropdownPlacement === 'bottom') {
+    // Only run if we have an active search. Dropdown is always 'bottom'.
+    if (activeSearch && dropdownRef.current && tableContainerRef.current) {
         const timer = setTimeout(() => {
             if (!dropdownRef.current || !tableContainerRef.current) return;
 
@@ -375,7 +372,7 @@ const App: React.FC = () => {
         }, 50); // Small delay to ensure DOM paint
         return () => clearTimeout(timer);
     }
-  }, [activeSearch, state.items, dropdownPlacement]); 
+  }, [activeSearch, state.items]); 
 
   // Focus margin input when dialog opens
   useEffect(() => {
@@ -478,6 +475,25 @@ const App: React.FC = () => {
            saveHistory(historySnapshot.current);
       }
       historySnapshot.current = null;
+  };
+
+  // --- AGGRESSIVE SELECTION HELPER ---
+  // Only triggered on FOCUS events.
+  // This allows the initial click/tab to select everything.
+  // Subsequent clicks (when already focused) will not trigger this, allowing the user to place the caret.
+  const handleFocusSelect = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      // Always save history snapshot on focus
+      handleInputFocus();
+      
+      const target = e.currentTarget;
+      // Immediate select
+      target.select();
+      
+      // Delayed select to override browser's default caret placement on the INITIAL click/focus
+      // This timeout ensures that after the 'mouseup' event sets the caret, we re-select all.
+      setTimeout(() => {
+          target.select();
+      }, 50);
   };
 
   // Keyboard Shortcuts for Undo/Redo
@@ -1393,14 +1409,6 @@ const App: React.FC = () => {
         i.description.toLowerCase().includes(lowerTerm)
       );
   };
-  
-  // Calculate Dropdown Placement based on screen position
-  const calculateDropdownPlacement = (target: HTMLElement) => {
-      const rect = target.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      // If less than 300px space below, position upwards
-      setDropdownPlacement(spaceBelow < 300 ? 'top' : 'bottom');
-  };
 
   // SAFEGUARD: If state is null (e.g. during heavy operations or initialization glitches), do not render
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
@@ -2079,26 +2087,30 @@ const App: React.FC = () => {
                                 updateField(item.id, 'code', e.target.value);
                                 adjustTextareaHeight(e);
                             }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    e.currentTarget.blur();
+                                }
+                            }}
                             onFocus={(e) => {
-                                handleInputFocus();
+                                handleFocusSelect(e);
                                 setSelectedRowId(item.id);
                                 setActiveSearch({ rowId: item.id, field: 'code' });
                                 adjustTextareaHeight(e);
-                                calculateDropdownPlacement(e.target); // Calculate position on focus
                             }}
                             onBlur={handleInputBlur}
                             placeholder="Buscar..."
                         />
-                        {/* Dropdown de búsqueda */}
-                        {activeSearch?.rowId === item.id && activeSearch.field === 'code' && item.code.length > 0 && (
-                             <div ref={dropdownRef} className={`absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm ${dropdownPlacement === 'top' ? 'bottom-full mb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : 'top-full mt-1'}`}>
+                        {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
+                        {activeSearch?.rowId === item.id && activeSearch.field === 'code' && item.code.length > 0 && getInlineSearchResults(item.code).length > 0 && (
+                             <div ref={dropdownRef} className="absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1">
                                  {getInlineSearchResults(item.code).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-800">{res.code}</span>
                                          <span className="truncate flex-1">{res.description}</span>
                                      </div>
                                  ))}
-                                 {getInlineSearchResults(item.code).length === 0 && <div className="p-3 text-sm text-slate-400 italic">Sin resultados</div>}
                              </div>
                         )}
                      </td>
@@ -2117,19 +2129,24 @@ const App: React.FC = () => {
                                 updateField(item.id, 'description', e.target.value);
                                 adjustTextareaHeight(e);
                             }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    e.currentTarget.blur();
+                                }
+                            }}
                             onFocus={(e) => {
-                                handleInputFocus();
+                                handleFocusSelect(e);
                                 setSelectedRowId(item.id);
                                 setActiveSearch({ rowId: item.id, field: 'description' });
                                 adjustTextareaHeight(e);
-                                calculateDropdownPlacement(e.target); // Calculate position on focus
                             }}
                             onBlur={handleInputBlur}
                             placeholder="Descripción..."
                         />
-                         {/* Dropdown de búsqueda */}
-                         {activeSearch?.rowId === item.id && activeSearch.field === 'description' && item.description.length > 1 && (
-                             <div ref={dropdownRef} className={`absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm ${dropdownPlacement === 'top' ? 'bottom-full mb-1 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : 'top-full mt-1'}`}>
+                         {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
+                         {activeSearch?.rowId === item.id && activeSearch.field === 'description' && item.description.length > 1 && getInlineSearchResults(item.description).length > 0 && (
+                             <div ref={dropdownRef} className="absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1">
                                  {getInlineSearchResults(item.description).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-500">{res.code}</span>
@@ -2152,9 +2169,12 @@ const App: React.FC = () => {
                           value={item.currentQuantity || ''}
                           placeholder="0"
                           onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
-                          onFocus={() => {
-                              handleInputFocus();
+                          onFocus={(e) => {
+                              handleFocusSelect(e);
                               setSelectedRowId(item.id);
+                          }}
+                          onKeyDown={(e) => {
+                              if(e.key === 'Enter') e.currentTarget.blur();
                           }}
                           onBlur={handleInputBlur}
                         />
@@ -2173,9 +2193,12 @@ const App: React.FC = () => {
                               value={item.kFactor || 1}
                               step="0.1"
                               onChange={(e) => updateField(item.id, 'kFactor', parseFloat(e.target.value) || 0)}
-                              onFocus={() => {
-                                  handleInputFocus();
+                              onFocus={(e) => {
+                                  handleFocusSelect(e);
                                   setSelectedRowId(item.id);
+                              }}
+                              onKeyDown={(e) => {
+                                if(e.key === 'Enter') e.currentTarget.blur();
                               }}
                               onBlur={handleInputBlur}
                             />
@@ -2187,7 +2210,11 @@ const App: React.FC = () => {
                         className={`border-r border-slate-200 p-0 align-top ${isCellSelected(index, state.projectInfo.isAveria ? 5 : 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 5 : 4, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 5 : 4)}
-                        onClick={() => setEditingCell({ rowId: item.id, field: 'unitPrice' })}
+                        onClick={() => {
+                            if (editingCell?.rowId !== item.id || editingCell?.field !== 'unitPrice') {
+                                setEditingCell({ rowId: item.id, field: 'unitPrice' });
+                            }
+                        }}
                      >
                         {editingCell?.rowId === item.id && editingCell?.field === 'unitPrice' ? (
                             <input 
@@ -2196,10 +2223,7 @@ const App: React.FC = () => {
                                 className="w-full px-3 py-3 text-right bg-white outline-none font-sans text-base text-slate-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 tabular-nums relative z-20 shadow-inner"
                                 value={item.unitPrice}
                                 onChange={(e) => updateField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                onFocus={(e) => {
-                                    handleInputFocus();
-                                    e.target.select();
-                                }}
+                                onFocus={handleFocusSelect}
                                 onBlur={() => {
                                     handleInputBlur();
                                     setEditingCell(null);
@@ -2242,9 +2266,15 @@ const App: React.FC = () => {
                                 updateField(item.id, 'observations', e.target.value);
                                 adjustTextareaHeight(e);
                             }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    e.currentTarget.blur();
+                                }
+                            }}
                             placeholder="..."
                             onFocus={(e) => {
-                                handleInputFocus();
+                                handleFocusSelect(e);
                                 setSelectedRowId(item.id);
                                 adjustTextareaHeight(e);
                             }}
