@@ -30,7 +30,11 @@ import {
   Divide,
   X as XIcon,
   Equal,
-  Info
+  Info,
+  HelpCircle,
+  MousePointer2,
+  Keyboard,
+  Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -293,6 +297,7 @@ const App: React.FC = () => {
   const [showProformaDialog, setShowProformaDialog] = useState(false);
   const [proformaMargin, setProformaMargin] = useState("0");
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
 
   // Excel-like Drag Selection State
   const [selection, setSelection] = useState<SelectionState>({
@@ -1718,6 +1723,16 @@ const App: React.FC = () => {
                  >
                      <Calculator className="w-4 h-4" />
                  </button>
+                 
+                 {/* HELP BUTTON */}
+                 <button 
+                     onClick={() => setShowHelpDialog(true)}
+                     className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded ml-2 transition-colors"
+                     title="Instrucciones de uso"
+                 >
+                     <HelpCircle className="w-4 h-4 text-purple-500" />
+                     <span className="hidden lg:inline text-sm font-medium">Ayuda</span>
+                 </button>
 
              </div>
          </div>
@@ -2415,6 +2430,143 @@ const App: React.FC = () => {
         
         {/* DRAGGABLE CALCULATOR RENDER */}
         {showCalculator && <DraggableCalculator onClose={() => setShowCalculator(false)} />}
+        
+        {/* HELP / INSTRUCTIONS DIALOG */}
+        {showHelpDialog && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="bg-slate-900 px-6 py-4 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-purple-500 p-1.5 rounded text-white">
+                                <HelpCircle className="w-5 h-5" />
+                            </div>
+                            <h2 className="text-xl font-bold text-white">Guía de Uso Rápida</h2>
+                        </div>
+                        <button onClick={() => setShowHelpDialog(false)} className="text-slate-400 hover:text-white transition-colors">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {/* Content Scrollable */}
+                    <div className="p-6 overflow-y-auto bg-slate-50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            {/* SECTION 1: Carga de Datos */}
+                            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-3 text-emerald-600 font-bold uppercase text-xs tracking-wider">
+                                    <Upload className="w-4 h-4" /> Importación
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2">1. Carga de Base de Precios</h3>
+                                <p className="text-sm text-slate-600 leading-relaxed mb-3">
+                                    Utilice el botón <strong>"Importar Tabla Rec."</strong> para cargar un Excel (.xlsx) con sus recursos.
+                                    La aplicación detectará automáticamente columnas como "Código", "Descripción", "Unidad" y "Precio".
+                                </p>
+                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded text-xs text-emerald-800">
+                                    <strong>Tip:</strong> Si ya cargó un archivo, puede ver su nombre pasando el ratón sobre el botón de importar.
+                                </div>
+                            </div>
+
+                            {/* SECTION 2: Edición Inteligente */}
+                            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-3 text-blue-600 font-bold uppercase text-xs tracking-wider">
+                                    <MousePointer2 className="w-4 h-4" /> Edición y Búsqueda
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2">2. Autocompletado y Arrastre</h3>
+                                <ul className="space-y-2 text-sm text-slate-600">
+                                    <li className="flex gap-2">
+                                        <span className="font-bold text-slate-800">•</span>
+                                        <span>Escriba en la columna <strong>Recurso</strong> o <strong>Descripción</strong> para buscar automáticamente en la base de datos cargada.</span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <span className="font-bold text-slate-800">•</span>
+                                        <span>Haga clic en una sugerencia para rellenar toda la fila (precio, unidad, etc).</span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <span className="font-bold text-slate-800">•</span>
+                                        <span><strong>Arrastre</strong> desde el número de fila (#) para reordenar las partidas.</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {/* SECTION 3: Modo Avería */}
+                            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-3 text-red-600 font-bold uppercase text-xs tracking-wider">
+                                    <AlertTriangle className="w-4 h-4" /> Modo Avería
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2">3. Gestión de Averías</h3>
+                                <p className="text-sm text-slate-600 leading-relaxed mb-3">
+                                    Active la casilla <strong>"AVERÍA"</strong> en la cabecera para habilitar campos especiales:
+                                </p>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-xs bg-red-50 p-2 rounded border border-red-100">
+                                        <span className="font-bold text-red-700">Coeficiente K:</span>
+                                        <span className="text-slate-600">Se añade una columna 'K' editable por fila.</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs bg-red-50 p-2 rounded border border-red-100">
+                                        <span className="font-bold text-red-700">Horarios:</span>
+                                        <span className="text-slate-600">Seleccione Diurno (K genérico 1,25) o Nocturno (1,75).</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* SECTION 4: Utilidades y Atajos */}
+                            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-3 text-purple-600 font-bold uppercase text-xs tracking-wider">
+                                    <Keyboard className="w-4 h-4" /> Utilidades
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2">4. Trucos y Atajos</h3>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <div className="bg-slate-100 p-2 rounded text-center font-mono font-bold text-slate-700">Ctrl + Z</div>
+                                    <div className="flex items-center text-slate-600">Deshacer cambios</div>
+                                    
+                                    <div className="bg-slate-100 p-2 rounded text-center font-mono font-bold text-slate-700">Ctrl + Y</div>
+                                    <div className="flex items-center text-slate-600">Rehacer cambios</div>
+                                </div>
+                                <div className="mt-4 pt-3 border-t border-slate-100">
+                                    <p className="text-xs text-slate-500">
+                                        <strong>Suma Rápida:</strong> Seleccione varias celdas con el ratón (como en Excel) para ver la suma total en la barra inferior.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                             {/* SECTION 5: Exportación */}
+                             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm col-span-1 md:col-span-2">
+                                <div className="flex items-center gap-2 mb-3 text-orange-600 font-bold uppercase text-xs tracking-wider">
+                                    <Download className="w-4 h-4" /> Exportación
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2">5. Generación de Documentos</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="p-3 bg-green-50 rounded border border-green-100">
+                                        <strong className="text-green-800 block text-sm mb-1">Excel (.xlsx)</strong>
+                                        <p className="text-xs text-slate-600">Exporta todos los datos editables para compartir o seguir trabajando.</p>
+                                    </div>
+                                    <div className="p-3 bg-red-50 rounded border border-red-100">
+                                        <strong className="text-red-800 block text-sm mb-1">PDF Certificación</strong>
+                                        <p className="text-xs text-slate-600">Informe formal con cabecera de TENSA SA y desglose completo.</p>
+                                    </div>
+                                    <div className="p-3 bg-blue-50 rounded border border-blue-100">
+                                        <strong className="text-blue-800 block text-sm mb-1">Factura Proforma</strong>
+                                        <p className="text-xs text-slate-600">Seleccione filas con el checkbox (tick) para crear una factura proforma con margen de beneficio aplicable.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                    
+                    {/* Footer */}
+                    <div className="bg-slate-100 px-6 py-4 border-t border-slate-200 text-center">
+                        <button 
+                            onClick={() => setShowHelpDialog(false)}
+                            className="px-8 py-2 bg-slate-900 text-white font-bold rounded hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10"
+                        >
+                            Entendido
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         </div>
       </div>
