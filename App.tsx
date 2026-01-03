@@ -56,6 +56,24 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
 
 const STORAGE_KEY = 'certipro_autosave_v1';
 
+// Helper to generate N empty rows
+const generateEmptyRows = (count: number): BudgetItem[] => {
+    return Array.from({ length: count }).map((_, i) => ({
+        id: `empty-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+        code: '',
+        description: '',
+        unit: 'ud',
+        plannedQuantity: 0,
+        unitPrice: 0,
+        previousQuantity: 0,
+        currentQuantity: 0,
+        totalQuantity: 0,
+        totalAmount: 0,
+        observations: '',
+        kFactor: 1
+    }));
+};
+
 // Selection State Interface
 interface SelectionState {
     start: { r: number; c: number } | null;
@@ -220,10 +238,10 @@ const App: React.FC = () => {
     } catch (e) {
         console.error("Failed to load autosave", e);
     }
-    // Fallback if no save found
+    // Fallback if no save found - Initialize with 100 empty rows
     return {
         masterItems: [],
-        items: [],
+        items: generateEmptyRows(100),
         projectInfo: INITIAL_PROJECT_INFO,
         isLoading: false,
         checkedRowIds: new Set(),
@@ -682,7 +700,7 @@ const App: React.FC = () => {
 
     setState(prev => ({
         ...prev,
-        items: [],
+        items: generateEmptyRows(100), // Initialize with 100 empty rows
         checkedRowIds: new Set(),
         projectInfo: {
             ...INITIAL_PROJECT_INFO,
@@ -2191,34 +2209,6 @@ const App: React.FC = () => {
                      </td>
                    </tr>
                  );})}
-                 
-                 {/* EMPTY STATE */}
-                 {state.items.length === 0 && (
-                   <tr>
-                     <td colSpan={state.projectInfo.isAveria ? 10 : 9} className="h-64 text-center text-slate-400 bg-slate-50">
-                        <div className="flex flex-col items-center justify-center h-full">
-                           <FileSpreadsheet className="w-20 h-20 mb-6 opacity-20" />
-                           <p className="text-xl font-medium">Hoja vacía</p>
-                           <p className="text-base mt-2 opacity-70">Importe un Excel de Recursos o use el botón "+" para añadir líneas manualmente</p>
-                           <button 
-                             onClick={() => addEmptyItem()}
-                             className="mt-6 px-6 py-3 bg-emerald-600 text-white rounded shadow hover:bg-emerald-700 transition flex items-center gap-2 text-lg"
-                           >
-                              <Plus className="w-6 h-6" /> Añadir primera partida
-                           </button>
-                        </div>
-                     </td>
-                   </tr>
-                 )}
-
-                 {/* TOTAL ROW */}
-                 {state.items.length > 0 && (
-                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 sticky bottom-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-                     <td colSpan={state.projectInfo.isAveria ? 7 : 6} className="px-4 py-4 text-right text-base uppercase text-slate-500 tracking-wider">Total Certificación</td>
-                     <td className="px-3 py-4 text-right text-xl text-slate-900 border-l border-slate-300 font-sans tabular-nums">{formatCurrency(totalAmount)}</td>
-                     <td colSpan={2} className="bg-slate-100 border-l border-slate-300"></td>
-                   </tr>
-                 )}
               </tbody>
             </table>
           </div>
