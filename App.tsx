@@ -238,10 +238,10 @@ const App: React.FC = () => {
     } catch (e) {
         console.error("Failed to load autosave", e);
     }
-    // Fallback if no save found - Initialize with 100 empty rows
+    // Fallback if no save found - Initialize with 200 empty rows
     return {
         masterItems: [],
-        items: generateEmptyRows(100),
+        items: generateEmptyRows(200),
         projectInfo: INITIAL_PROJECT_INFO,
         isLoading: false,
         checkedRowIds: new Set(),
@@ -700,7 +700,7 @@ const App: React.FC = () => {
 
     setState(prev => ({
         ...prev,
-        items: generateEmptyRows(100), // Initialize with 100 empty rows
+        items: generateEmptyRows(200), // Initialize with 200 empty rows
         checkedRowIds: new Set(),
         projectInfo: {
             ...INITIAL_PROJECT_INFO,
@@ -2244,55 +2244,73 @@ const App: React.FC = () => {
 
            {/* PROFORMA MARGIN DIALOG */}
            {showProformaDialog && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
-                    <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                           <CheckSquare className="w-5 h-5 text-blue-600"/> Generar Proforma
-                        </h3>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-sm overflow-hidden transform transition-all scale-100 border border-slate-100">
+                    
+                    {/* Header Styled like Horario Card */}
+                    <div className="bg-slate-50/80 px-5 py-4 border-b border-slate-100 flex items-center justify-between backdrop-blur-sm">
+                         <div className="flex items-center gap-2.5">
+                            <div className="bg-blue-100 p-1.5 rounded-md">
+                                <CheckSquare className="w-4 h-4 text-blue-600"/> 
+                            </div>
+                            <span className="font-bold text-slate-700 text-sm tracking-tight">Generar Factura Proforma</span>
+                         </div>
                         <button 
                            onClick={() => setShowProformaDialog(false)}
-                           className="text-slate-400 hover:text-slate-600"
+                           className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-1 rounded-full transition-colors"
                         >
-                            <X className="w-5 h-5"/>
+                            <X className="w-4 h-4"/>
                         </button>
                     </div>
                     
                     <div className="p-6">
-                        <p className="text-slate-600 mb-4 text-sm leading-relaxed">
-                            Indique el porcentaje de margen de beneficio que desea descontar en la proforma.
-                            <br/>
-                            <span className="text-xs text-slate-400 mt-1 block">
-                                (El precio mostrado será: <span className="font-mono bg-slate-100 px-1 rounded">Precio / (1 + Margen/100)</span>)
-                            </span>
-                        </p>
+                        {/* Info Block with Left Line Decoration */}
+                        <div className="relative pl-4 mb-6">
+                            <div className="absolute left-0 top-1 w-1 h-full max-h-[40px] bg-blue-500 rounded-full opacity-20"></div>
+                            <p className="text-sm text-slate-600 font-medium leading-snug">
+                                Margen de Beneficio
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                Indique el porcentaje a descontar. El precio unitario se ajustará automáticamente.
+                            </p>
+                        </div>
                         
-                        <div className="relative mb-6">
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Margen de Beneficio (%)</label>
-                            <div className="relative">
-                                <Percent className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                        <div className="mb-8">
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Percent className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                </div>
                                 <input 
                                     ref={marginInputRef}
                                     type="number" 
-                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-800 text-lg shadow-sm"
+                                    className="block w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-lg text-slate-700 text-xl font-bold placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
                                     placeholder="0"
                                     value={proformaMargin}
                                     onChange={(e) => setProformaMargin(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && confirmProformaExport()}
                                 />
+                                <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                    <span className="text-slate-400 font-bold text-sm">%</span>
+                                </div>
+                            </div>
+                            <div className="mt-2 text-center">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fórmula aplicada</span>
+                                <div className="mt-1 text-xs font-mono bg-slate-50 text-slate-500 py-1.5 px-2 rounded border border-slate-100 inline-block">
+                                    Precio Final = Base / (1 + %/100)
+                                </div>
                             </div>
                         </div>
 
-                        <div className="flex gap-3 justify-end">
+                        <div className="flex gap-3">
                             <button 
                                 onClick={() => setShowProformaDialog(false)}
-                                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded transition-colors"
+                                className="flex-1 px-4 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all"
                             >
                                 Cancelar
                             </button>
                             <button 
                                 onClick={confirmProformaExport}
-                                className="px-5 py-2 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700 transition-colors flex items-center gap-2"
+                                className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg shadow-lg shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/30 active:transform active:scale-95 transition-all flex items-center justify-center gap-2"
                             >
                                 <FileText className="w-4 h-4" />
                                 Generar PDF
