@@ -249,6 +249,9 @@ const App: React.FC = () => {
     };
   });
   
+  // Search State
+  const [searchTerm, setSearchTerm] = useState('');
+
   // --- AUTOSAVE EFFECT ---
   useEffect(() => {
      if (!state) return;
@@ -316,6 +319,17 @@ const App: React.FC = () => {
     y: 0,
     rowId: null
   });
+
+  // --- FILTERED ITEMS LOGIC ---
+  const filteredItems = useMemo(() => {
+    if (!searchTerm.trim()) return state.items;
+    const lower = searchTerm.toLowerCase();
+    return state.items.filter(i => 
+        i.code.toLowerCase().includes(lower) || 
+        i.description.toLowerCase().includes(lower) || 
+        (i.observations && i.observations.toLowerCase().includes(lower))
+    );
+  }, [state.items, searchTerm]);
 
   // --- AUTO-SCROLL LOGIC FOR DRAGGING ROWS ---
   useEffect(() => {
@@ -545,9 +559,16 @@ const App: React.FC = () => {
               // Determine if we should preserve current master items
               const hasLocalMasterItems = state.masterItems && state.masterItems.length > 0;
 
+              // Ensure loaded items have at least 200 rows
+              let loadedItems = Array.isArray(data.items) ? data.items : [];
+              if (loadedItems.length < 200) {
+                  const rowsNeeded = 200 - loadedItems.length;
+                  loadedItems = [...loadedItems, ...generateEmptyRows(rowsNeeded)];
+              }
+
               setState({
                   projectInfo: data.projectInfo || INITIAL_PROJECT_INFO,
-                  items: Array.isArray(data.items) ? data.items : [],
+                  items: loadedItems,
                   // Priority: Local Master Items > Imported Master Items > Empty
                   masterItems: hasLocalMasterItems 
                       ? state.masterItems 
@@ -1203,7 +1224,7 @@ const App: React.FC = () => {
     setActiveSearch(null);
   };
 
-  const addEmptyItem = (targetIndex?: number) => {
+  const addEmptyItem = (referenceId?: string) => {
     saveHistory(state); // Save current state before changing
     // 1. Add Item (No validation restrictions)
     const newItem: BudgetItem = {
@@ -1224,18 +1245,19 @@ const App: React.FC = () => {
     setState(prev => {
         if (!prev) return prev;
         const newItems = [...prev.items];
-        if (typeof targetIndex === 'number') {
-            newItems.splice(targetIndex + 1, 0, newItem);
+        let insertIndex = newItems.length; // Default to end
+
+        // If referenceId is provided (from row button), use it to find index
+        if (referenceId) {
+             const idx = newItems.findIndex(i => i.id === referenceId);
+             if (idx !== -1) insertIndex = idx + 1;
+        // Fallback to selected row if no direct reference
         } else if (selectedRowId) {
-            const idx = newItems.findIndex(i => i.id === selectedRowId);
-            if (idx !== -1) {
-                newItems.splice(idx + 1, 0, newItem);
-            } else {
-                newItems.push(newItem);
-            }
-        } else {
-            newItems.push(newItem);
+             const idx = newItems.findIndex(i => i.id === selectedRowId);
+             if (idx !== -1) insertIndex = idx + 1;
         }
+        
+        newItems.splice(insertIndex, 0, newItem);
         return { ...prev, items: newItems };
     });
 
@@ -1893,13 +1915,37 @@ const App: React.FC = () => {
       <div className="flex-1 overflow-hidden relative">
         <div className="flex flex-col h-full bg-white relative">
           
-          {/* BARRA SUPERIOR (Limpia) */}
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-10 shrink-0">
-            {!selectedRowId && (
-                <div className="text-sm text-slate-400 italic ml-auto">
-                    Seleccione una fila para editar o arrastre el ratón para calcular totales
-                </div>
-            )}
+          {/* BARRA SUPERIOR CON BUSQUEDA */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-12 shrink-0">
+             
+             {/* Search Input */}
+             <div className="relative group">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                <input 
+                    type="text" 
+                    className="pl-9 pr-8 py-1.5 bg-white border border-slate-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all shadow-sm placeholder-slate-400"
+                    placeholder="Buscar en certificación..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                    <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full p-0.5 transition-colors"
+                    >
+                        <X className="w-3 h-3" />
+                    </button>
+                )}
+             </div>
+
+             {/* Context Info */}
+             <div className="text-sm text-slate-500 font-medium">
+                {searchTerm ? (
+                    <span>Resultados: <span className="text-slate-900 font-bold">{filteredItems.length}</span></span>
+                ) : (
+                     !selectedRowId && <span className="text-slate-400 italic font-normal hidden md:inline">Seleccione una fila para editar o arrastre el ratón para calcular totales</span>
+                )}
+             </div>
           </div>
 
           {/* GRID PRINCIPAL */}
@@ -1926,7 +1972,7 @@ const App: React.FC = () => {
                  </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                 {state.items.map((item, index) => {
+                 {filteredItems.map((item, index) => {
                    const effectiveTotal = roundToTwo(item.currentQuantity * (state.projectInfo.isAveria ? (item.kFactor || 1) : 1) * item.unitPrice);
                    return (
                    <tr 
@@ -1953,16 +1999,18 @@ const App: React.FC = () => {
                          />
                      </td>
 
-                     {/* ROW NUMBER / HANDLE - NOW DRAGGABLE */}
+                     {/* ROW NUMBER / HANDLE - NOW DRAGGABLE (DISABLED IF SEARCHING) */}
                      <td 
-                        className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 cursor-move hover:text-slate-600 active:text-slate-800 ${selectedRowId === item.id ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-200'}`}
-                        draggable
+                        className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 ${!searchTerm ? 'cursor-move hover:text-slate-600 active:text-slate-800' : 'cursor-default opacity-50'} ${selectedRowId === item.id ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-200'}`}
+                        draggable={!searchTerm}
                         onDragStart={(e) => {
+                            if (searchTerm) { e.preventDefault(); return; }
                             setDraggedRowIndex(index);
                             e.dataTransfer.effectAllowed = "move";
                             // Optional: Transparent ghost image if needed, but browser default is usually fine for rows
                         }}
                         onDragOver={(e) => {
+                            if (searchTerm) return;
                             e.preventDefault(); // Necessary to allow dropping
                             e.dataTransfer.dropEffect = "move";
                             
@@ -1989,6 +2037,7 @@ const App: React.FC = () => {
                             autoScrollSpeed.current = 0;
                         }}
                         onDrop={(e) => {
+                            if (searchTerm) return;
                             e.preventDefault();
                             autoScrollSpeed.current = 0;
                             if (draggedRowIndex !== null) {
@@ -1996,7 +2045,7 @@ const App: React.FC = () => {
                                 setDraggedRowIndex(null);
                             }
                         }}
-                        title="Arrastrar para reordenar fila"
+                        title={searchTerm ? "Reordenar desactivado durante la búsqueda" : "Arrastrar para reordenar fila"}
                      >
                         {index + 1}
                      </td>
@@ -2192,7 +2241,7 @@ const App: React.FC = () => {
                      <td className="border-l border-slate-200 p-0 text-center bg-slate-50 align-top">
                         <div className="flex items-center justify-center pt-3 gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
                             <button 
-                                onClick={(e) => { e.stopPropagation(); addEmptyItem(index); }}
+                                onClick={(e) => { e.stopPropagation(); addEmptyItem(item.id); }}
                                 className="p-2 hover:bg-emerald-100 text-emerald-600 rounded transition-colors"
                                 title="Insertar fila vacía debajo"
                             >
@@ -2225,8 +2274,7 @@ const App: React.FC = () => {
                 <button 
                     className="px-4 py-3 text-left hover:bg-blue-50 text-slate-700 text-base flex items-center gap-2"
                     onClick={() => {
-                        const idx = state.items.findIndex(i => i.id === contextMenu.rowId);
-                        addEmptyItem(idx !== -1 ? idx : undefined);
+                        addEmptyItem(contextMenu.rowId || undefined);
                         setContextMenu(prev => ({...prev, visible: false}));
                     }}
                 >
