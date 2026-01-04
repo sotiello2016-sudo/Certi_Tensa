@@ -1413,17 +1413,10 @@ const App: React.FC = () => {
       if (exportBtnRef.current && !exportBtnRef.current.contains(e.target as Node)) {
         setShowExportMenu(false);
       }
-      // Close inline search dropdown if clicking outside
-      if (activeSearch && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-          const target = e.target as HTMLElement;
-          if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-              setActiveSearch(null);
-          }
-      }
     };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu.visible, showExportMenu, activeSearch]);
+  }, [contextMenu.visible, showExportMenu]);
 
   const handleContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -1434,6 +1427,12 @@ const App: React.FC = () => {
         y: e.clientY,
         rowId: id
     });
+  };
+
+  const handleSearchBlur = () => {
+    handleInputBlur();
+    // Close search dropdown when focus is lost
+    setActiveSearch(null);
   };
 
   // Auto-resize textarea height
@@ -1987,12 +1986,16 @@ const App: React.FC = () => {
                                 setActiveSearch({ rowId: item.id, field: 'code' });
                                 adjustTextareaHeight(e);
                             }}
-                            onBlur={handleInputBlur}
+                            onBlur={handleSearchBlur}
                             placeholder="Buscar..."
                         />
                         {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
                         {activeSearch?.rowId === item.id && activeSearch.field === 'code' && item.code.length > 0 && getInlineSearchResults(item.code).length > 0 && (
-                             <div ref={dropdownRef} className="absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1">
+                             <div 
+                                ref={dropdownRef} 
+                                className="absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
+                                onMouseDown={(e) => e.preventDefault()}
+                             >
                                  {getInlineSearchResults(item.code).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-800">{res.code}</span>
@@ -2027,12 +2030,16 @@ const App: React.FC = () => {
                                 setActiveSearch({ rowId: item.id, field: 'description' });
                                 adjustTextareaHeight(e);
                             }}
-                            onBlur={handleInputBlur}
+                            onBlur={handleSearchBlur}
                             placeholder="Descripción..."
                         />
                          {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
                          {activeSearch?.rowId === item.id && activeSearch.field === 'description' && item.description.length > 1 && getInlineSearchResults(item.description).length > 0 && (
-                             <div ref={dropdownRef} className="absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1">
+                             <div 
+                                ref={dropdownRef} 
+                                className="absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
+                                onMouseDown={(e) => e.preventDefault()}
+                             >
                                  {getInlineSearchResults(item.description).map(res => (
                                      <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
                                          <span className="font-bold font-sans text-slate-500">{res.code}</span>
@@ -2510,4 +2517,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-    
