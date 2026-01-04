@@ -298,14 +298,6 @@ const App: React.FC = () => {
   // Editing Cell State for View/Edit mode switching (Price column)
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
 
-  // Context Menu State
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; rowId: string | null }>({
-    visible: false,
-    x: 0,
-    y: 0,
-    rowId: null
-  });
-
   // --- FILTERED ITEMS LOGIC ---
   const filteredItems = useMemo(() => {
     if (!searchTerm.trim()) return state.items;
@@ -1287,7 +1279,7 @@ const App: React.FC = () => {
         checkedRowIds: newChecks
       };
     });
-    setContextMenu({ ...contextMenu, visible: false });
+    // Remove context menu reset as it is deleted
     if (selectedRowId === id) setSelectedRowId(null);
   };
 
@@ -1405,29 +1397,21 @@ const App: React.FC = () => {
   // Event Handlers for UI
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      // Close context menu
-      if (contextMenu.visible) {
-         setContextMenu(prev => ({ ...prev, visible: false }));
-      }
       // Close export menu
       if (exportBtnRef.current && !exportBtnRef.current.contains(e.target as Node)) {
         setShowExportMenu(false);
       }
+      // Close inline search dropdown if clicking outside
+      if (activeSearch && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+          const target = e.target as HTMLElement;
+          if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+              setActiveSearch(null);
+          }
+      }
     };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu.visible, showExportMenu]);
-
-  const handleContextMenu = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    setSelectedRowId(id);
-    setContextMenu({
-        visible: true,
-        x: e.clientX,
-        y: e.clientY,
-        rowId: id
-    });
-  };
+  }, [showExportMenu, activeSearch]); // Removed contextMenu dependency
 
   const handleSearchBlur = () => {
     handleInputBlur();
@@ -1896,7 +1880,6 @@ const App: React.FC = () => {
                             : index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
                       }`}
                       onClick={() => setSelectedRowId(item.id)}
-                      onContextMenu={(e) => handleContextMenu(e, item.id)}
                    >
                      {/* CHECKBOX COLUMN */}
                      <td className="border-r border-slate-300 text-center bg-transparent align-top pt-4">
@@ -2190,34 +2173,6 @@ const App: React.FC = () => {
             </table>
           </div>
           
-          {/* CUSTOM CONTEXT MENU */}
-          {contextMenu.visible && (
-            <div 
-                className="fixed bg-white border border-slate-300 shadow-xl rounded-sm z-[100] w-64 py-2 flex flex-col text-left"
-                style={{ top: contextMenu.y, left: contextMenu.x }}
-            >
-                <div className="px-4 py-2 text-sm text-slate-400 uppercase font-bold border-b border-slate-100 mb-1">
-                    Opciones de Fila
-                </div>
-                <button 
-                    className="px-4 py-3 text-left hover:bg-blue-50 text-slate-700 text-base flex items-center gap-2"
-                    onClick={() => {
-                        addEmptyItem(contextMenu.rowId || undefined);
-                        setContextMenu(prev => ({...prev, visible: false}));
-                    }}
-                >
-                    <Plus className="w-5 h-5" /> Insertar Fila Vacía
-                </button>
-                <div className="h-px bg-slate-200 my-1"></div>
-                <button 
-                    className="px-4 py-3 text-left hover:bg-red-50 text-red-600 text-base flex items-center gap-2"
-                    onClick={() => deleteItem(contextMenu.rowId)}
-                >
-                    <Trash2 className="w-5 h-5" /> Eliminar Fila
-                </button>
-            </div>
-          )}
-
            {/* PROFORMA MARGIN DIALOG */}
            {showProformaDialog && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
