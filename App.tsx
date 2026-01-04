@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   FileSpreadsheet, 
@@ -426,6 +425,7 @@ const BudgetItemRow = React.memo(({
     );
 }, (prev, next) => {
     // Custom Deep Compare for Performance
+    if (prev.index !== next.index) return false; // <-- CRUCIAL: Re-render if row index changes
     if (prev.item !== next.item) return false;
     if (prev.isChecked !== next.isChecked) return false;
     if (prev.isSelected !== next.isSelected) return false;
