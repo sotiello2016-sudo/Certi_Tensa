@@ -2102,13 +2102,13 @@ const App: React.FC = () => {
 
                      {/* RECURSO (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative align-top ${isCellSelected(index, 1) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                        className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 1) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, 1, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, 1)}
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-emerald-500 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                             value={item.code}
                             onChange={(e) => {
                                 updateField(item.id, 'code', e.target.value);
@@ -2144,13 +2144,13 @@ const App: React.FC = () => {
 
                      {/* DESCRIPCIÓN (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative align-top ${isCellSelected(index, 2) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                        className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 2) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, 2, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, 2)}
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-white focus:ring-2 focus:ring-inset focus:ring-emerald-500 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                             value={item.description}
                             onChange={(e) => {
                                 updateField(item.id, 'description', e.target.value);
@@ -2186,13 +2186,13 @@ const App: React.FC = () => {
                      
                      {/* MAIN INPUT: QUANTITY */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top ${isCellSelected(index, 3) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                        className={`border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 3) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, 3, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, 3)}
                      >
                         <input 
                           type="number"
-                          className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-white focus:ring-2 focus:ring-inset focus:ring-emerald-500 outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text"
+                          className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                           value={item.currentQuantity || ''}
                           placeholder="0"
                           onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
@@ -2210,13 +2210,13 @@ const App: React.FC = () => {
                      {/* K FACTOR INPUT (CONDITIONAL) */}
                      {state.projectInfo.isAveria && (
                          <td 
-                            className={`border-r border-slate-200 p-0 relative bg-red-50/30 align-top ${isCellSelected(index, 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                            className={`border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                             onMouseDown={(e) => handleCellMouseDown(index, 4, e)}
                             onMouseEnter={() => handleCellMouseEnter(index, 4)}
                          >
                             <input 
                               type="number"
-                              className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-white focus:ring-2 focus:ring-inset focus:ring-red-500 outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text"
+                              className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                               value={item.kFactor || 1}
                               step="0.1"
                               onChange={(e) => updateField(item.id, 'kFactor', parseFloat(e.target.value) || 0)}
@@ -2234,7 +2234,7 @@ const App: React.FC = () => {
 
                      {/* PRICE INPUT (VIEW/EDIT MODE) */}
                      <td 
-                        className={`border-r border-slate-200 p-0 align-top ${isCellSelected(index, state.projectInfo.isAveria ? 5 : 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                        className={`border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, state.projectInfo.isAveria ? 5 : 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 5 : 4, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 5 : 4)}
                         onClick={() => {
@@ -2247,7 +2247,7 @@ const App: React.FC = () => {
                             <input 
                                 autoFocus
                                 type="number"
-                                className="w-full px-3 py-3 text-right bg-white outline-none font-sans text-base text-slate-800 focus:ring-2 focus:ring-inset focus:ring-emerald-500 tabular-nums relative z-20 shadow-inner caret-black cursor-default focus:cursor-text"
+                                className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                                 value={item.unitPrice}
                                 onChange={(e) => updateField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onFocus={handleFocusSelect}
@@ -2261,7 +2261,7 @@ const App: React.FC = () => {
                             />
                         ) : (
                             <div 
-                                className="w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default"
+                                className="w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default outline-none"
                                 tabIndex={0}
                                 onFocus={() => setEditingCell({ rowId: item.id, field: 'unitPrice' })}
                             >
@@ -2281,13 +2281,13 @@ const App: React.FC = () => {
 
                      {/* OBSERVATIONS COLUMN - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 bg-slate-50/30 align-top ${isCellSelected(index, state.projectInfo.isAveria ? 7 : 6) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
+                        className={`border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, state.projectInfo.isAveria ? 7 : 6) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
                         onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 7 : 6, e)}
                         onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 7 : 6)}
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-white focus:ring-2 focus:ring-inset focus:ring-emerald-500 placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
                             value={item.observations || ''}
                             onChange={(e) => {
                                 updateField(item.id, 'observations', e.target.value);
@@ -2679,3 +2679,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+    
