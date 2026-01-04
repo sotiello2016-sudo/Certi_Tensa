@@ -2108,7 +2108,7 @@ const App: React.FC = () => {
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                             value={item.code}
                             onChange={(e) => {
                                 updateField(item.id, 'code', e.target.value);
@@ -2150,7 +2150,7 @@ const App: React.FC = () => {
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                             value={item.description}
                             onChange={(e) => {
                                 updateField(item.id, 'description', e.target.value);
@@ -2192,7 +2192,7 @@ const App: React.FC = () => {
                      >
                         <input 
                           type="number"
-                          className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                          className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                           value={item.currentQuantity || ''}
                           placeholder="0"
                           onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
@@ -2216,7 +2216,7 @@ const App: React.FC = () => {
                          >
                             <input 
                               type="number"
-                              className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                              className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                               value={item.kFactor || 1}
                               step="0.1"
                               onChange={(e) => updateField(item.id, 'kFactor', parseFloat(e.target.value) || 0)}
@@ -2247,7 +2247,7 @@ const App: React.FC = () => {
                             <input 
                                 autoFocus
                                 type="number"
-                                className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                                className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                                 value={item.unitPrice}
                                 onChange={(e) => updateField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onFocus={handleFocusSelect}
@@ -2287,7 +2287,7 @@ const App: React.FC = () => {
                      >
                         <textarea 
                             rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-200 selection:text-slate-800"
+                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
                             value={item.observations || ''}
                             onChange={(e) => {
                                 updateField(item.id, 'observations', e.target.value);
@@ -2679,4 +2679,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-    
