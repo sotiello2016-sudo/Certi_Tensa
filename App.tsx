@@ -334,7 +334,7 @@ const App: React.FC = () => {
     );
   }, [state.items, searchTerm]);
 
-  // --- AUTO-SCROLL LOGIC FOR DRAGGING ROWS ---
+  // --- AUTO-SCROLL LOGIC FOR DRAGGING ROWS AND SELECTION ---
   useEffect(() => {
     let animationFrameId: number;
 
@@ -1421,15 +1421,42 @@ const App: React.FC = () => {
 
   // --- SELECTION & STATS LOGIC ---
   
-  // Register mouse up globally to stop dragging
+  // Register mouse up globally to stop dragging AND handle auto-scroll on drag
   useEffect(() => {
       const handleWindowMouseUp = () => {
           if (selection.isDragging) {
               setSelection(prev => ({ ...prev, isDragging: false }));
+              autoScrollSpeed.current = 0; // Stop scrolling immediately
           }
       };
+      
+      const handleWindowMouseMove = (e: MouseEvent) => {
+          if (selection.isDragging && tableContainerRef.current) {
+              const rect = tableContainerRef.current.getBoundingClientRect();
+              const y = e.clientY;
+              const threshold = 100; // Activation zone size in pixels
+              
+              // Check if mouse is near top or bottom of the container
+              if (y < rect.top + threshold) {
+                  // Scroll Up
+                  autoScrollSpeed.current = -15; 
+              } else if (y > rect.bottom - threshold) {
+                  // Scroll Down
+                  autoScrollSpeed.current = 15;
+              } else {
+                  // In the middle zone - stop scrolling
+                  autoScrollSpeed.current = 0;
+              }
+          }
+      };
+
       window.addEventListener('mouseup', handleWindowMouseUp);
-      return () => window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      
+      return () => {
+          window.removeEventListener('mouseup', handleWindowMouseUp);
+          window.removeEventListener('mousemove', handleWindowMouseMove);
+      };
   }, [selection.isDragging]);
 
   const handleCellMouseDown = (r: number, c: number, e: React.MouseEvent) => {
@@ -2652,3 +2679,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+  
