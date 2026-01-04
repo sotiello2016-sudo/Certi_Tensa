@@ -913,6 +913,8 @@ const App: React.FC = () => {
            saveHistory(historySnapshot.current);
       }
       historySnapshot.current = null;
+      // Close search dropdown when focus is lost (Enter or clicking away)
+      setActiveSearch(null);
   }, [state]);
 
   // --- PERSISTENCE (SAVE/LOAD) LOGIC ---
@@ -1917,12 +1919,6 @@ const App: React.FC = () => {
         window.removeEventListener('mouseup', handleWindowMouseUp);
     };
   }, [showExportMenu, activeSearch]); // removed selectionRange dependency as we use setSelectionRange(null)
-
-  const handleSearchBlur = () => {
-    handleInputBlur();
-    // Close search dropdown when focus is lost
-    setActiveSearch(null);
-  };
 
   // Row Drag Logic Callbacks
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
