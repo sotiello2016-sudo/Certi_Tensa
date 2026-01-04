@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   FileSpreadsheet, 
   Save,
@@ -78,6 +78,379 @@ const generateEmptyRows = (count: number): BudgetItem[] => {
         kFactor: 1
     }));
 };
+
+// --- OPTIMIZED ROW COMPONENT ---
+// Extracting row to a memoized component prevents re-rendering the entire 200+ list 
+// when a single character is typed.
+interface RowProps {
+    item: BudgetItem;
+    index: number;
+    isChecked: boolean;
+    isSelected: boolean;
+    isInSelection: boolean;
+    isAveria: boolean;
+    searchTerm: string;
+    activeSearch: { rowId: string, field: 'code' | 'description' } | null;
+    editingCell: { rowId: string, field: string } | null;
+    masterItems: BudgetItem[];
+    
+    // Actions
+    onToggleCheck: (id: string) => void;
+    onSetSelectedRow: (id: string) => void;
+    onDragStart: (e: React.DragEvent, index: number) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+    onDrop: (e: React.DragEvent, index: number) => void;
+    onUpdateField: (id: string, field: keyof BudgetItem, value: string | number) => void;
+    onUpdateQuantity: (id: string, value: number) => void;
+    onFillRow: (id: string, masterItem: BudgetItem) => void;
+    onAddEmpty: (id: string) => void;
+    onDelete: (id: string) => void;
+    onSetActiveSearch: (data: { rowId: string, field: 'code' | 'description' } | null) => void;
+    onSetEditingCell: (data: { rowId: string, field: string } | null) => void;
+    onCellMouseDown: (index: number, e: React.MouseEvent) => void;
+    onCellMouseEnter: (index: number) => void;
+    onInputFocus: () => void;
+    onInputBlur: () => void;
+    dropdownRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const BudgetItemRow = React.memo(({
+    item, index, isChecked, isSelected, isInSelection, isAveria, searchTerm, 
+    activeSearch, editingCell, masterItems,
+    onToggleCheck, onSetSelectedRow, onDragStart, onDragOver, onDragEnd, onDrop,
+    onUpdateField, onUpdateQuantity, onFillRow, onAddEmpty, onDelete,
+    onSetActiveSearch, onSetEditingCell, onCellMouseDown, onCellMouseEnter,
+    onInputFocus, onInputBlur, dropdownRef
+}: RowProps) => {
+
+    const effectiveTotal = roundToTwo(item.currentQuantity * (isAveria ? (item.kFactor || 1) : 1) * item.unitPrice);
+
+    // Local helpers
+    const handleFocusSelect = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        onInputFocus();
+        const target = e.currentTarget;
+        target.select();
+        setTimeout(() => target.select(), 50);
+    };
+
+    const adjustTextareaHeight = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const target = e.target;
+        requestAnimationFrame(() => {
+            target.style.height = 'auto';
+            target.style.height = `${target.scrollHeight}px`;
+        });
+    };
+
+    const preventDrag = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const getInlineSearchResults = (term: string) => {
+        if (!term || term.length < 2) return [];
+        const lowerTerm = term.toLowerCase();
+        return masterItems.filter(i => 
+          i.code.toLowerCase().includes(lowerTerm) || 
+          i.description.toLowerCase().includes(lowerTerm)
+        ).slice(0, 50);
+    };
+
+    const searchResults = (activeSearch?.rowId === item.id && (item.code.length > 0 || item.description.length > 1))
+        ? getInlineSearchResults(activeSearch.field === 'code' ? item.code : item.description)
+        : [];
+
+    return (
+        <tr 
+            className={`group cursor-default transition-colors ${
+                isSelected ? 'bg-blue-100 border-blue-200' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+            }`}
+            onClick={() => onSetSelectedRow(item.id)}
+        >
+            {/* CHECKBOX */}
+            <td className="border-r border-slate-300 text-center bg-transparent align-top pt-4">
+                <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-slate-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    checked={isChecked}
+                    onChange={(e) => {
+                        e.stopPropagation();
+                        onToggleCheck(item.id);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </td>
+
+            {/* ROW HANDLE */}
+            <td 
+                className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 ${!searchTerm ? 'cursor-move hover:text-slate-600 active:text-slate-800' : 'cursor-default opacity-50'} ${isSelected ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
+                draggable={!searchTerm}
+                onDragStart={(e) => {
+                    if (searchTerm) { e.preventDefault(); return; }
+                    onDragStart(e, index);
+                }}
+                onDragOver={onDragOver}
+                onDragEnd={onDragEnd}
+                onDrop={(e) => onDrop(e, index)}
+                title={searchTerm ? "Reordenar desactivado durante la búsqueda" : "Arrastrar para reordenar fila"}
+            >
+                {index + 1}
+            </td>
+
+            {/* RECURSO */}
+            <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <textarea 
+                    rows={1}
+                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    value={item.code}
+                    draggable={false}
+                    onDragStart={preventDrag}
+                    onChange={(e) => {
+                        onUpdateField(item.id, 'code', e.target.value);
+                        adjustTextareaHeight(e);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                        }
+                    }}
+                    onFocus={(e) => {
+                        handleFocusSelect(e);
+                        onSetSelectedRow(item.id);
+                        onSetActiveSearch({ rowId: item.id, field: 'code' });
+                        adjustTextareaHeight(e);
+                    }}
+                    onBlur={onInputBlur}
+                    placeholder="Buscar..."
+                />
+                {activeSearch?.rowId === item.id && activeSearch.field === 'code' && searchResults.length > 0 && (
+                    <div 
+                        ref={dropdownRef}
+                        className="absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
+                        onMouseDown={(e) => e.preventDefault()}
+                    >
+                        {searchResults.map(res => (
+                            <div key={res.id} onClick={() => onFillRow(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
+                                <span className="font-bold font-sans text-slate-800">{res.code}</span>
+                                <span className="truncate flex-1">{res.description}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </td>
+
+            {/* DESCRIPCION */}
+            <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <textarea 
+                    rows={1}
+                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    value={item.description}
+                    draggable={false}
+                    onDragStart={preventDrag}
+                    onChange={(e) => {
+                        onUpdateField(item.id, 'description', e.target.value);
+                        adjustTextareaHeight(e);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                        }
+                    }}
+                    onFocus={(e) => {
+                        handleFocusSelect(e);
+                        onSetSelectedRow(item.id);
+                        onSetActiveSearch({ rowId: item.id, field: 'description' });
+                        adjustTextareaHeight(e);
+                    }}
+                    onBlur={onInputBlur}
+                    placeholder="Descripción..."
+                />
+                {activeSearch?.rowId === item.id && activeSearch.field === 'description' && searchResults.length > 0 && (
+                    <div 
+                        ref={dropdownRef}
+                        className="absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
+                        onMouseDown={(e) => e.preventDefault()}
+                    >
+                        {searchResults.map(res => (
+                            <div key={res.id} onClick={() => onFillRow(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
+                                <span className="font-bold font-sans text-slate-500">{res.code}</span>
+                                <span className="truncate flex-1">{res.description}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </td>
+
+            {/* QUANTITY */}
+            <td className="border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <input 
+                    type="number"
+                    className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    value={item.currentQuantity || ''}
+                    draggable={false}
+                    onDragStart={preventDrag}
+                    placeholder="0"
+                    onChange={(e) => onUpdateQuantity(item.id, parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => {
+                        handleFocusSelect(e);
+                        onSetSelectedRow(item.id);
+                    }}
+                    onKeyDown={(e) => { if(e.key === 'Enter') e.currentTarget.blur(); }}
+                    onBlur={onInputBlur}
+                />
+            </td>
+
+            {/* K FACTOR */}
+            {isAveria && (
+                <td className="border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                    <input 
+                        type="number"
+                        className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                        value={item.kFactor || 1}
+                        draggable={false}
+                        onDragStart={preventDrag}
+                        step="0.1"
+                        onChange={(e) => onUpdateField(item.id, 'kFactor', parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => {
+                            handleFocusSelect(e);
+                            onSetSelectedRow(item.id);
+                        }}
+                        onKeyDown={(e) => { if(e.key === 'Enter') e.currentTarget.blur(); }}
+                        onBlur={onInputBlur}
+                    />
+                </td>
+            )}
+
+            {/* PRICE */}
+            <td 
+                className="border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
+                onClick={() => {
+                    if (editingCell?.rowId !== item.id || editingCell?.field !== 'unitPrice') {
+                        onSetEditingCell({ rowId: item.id, field: 'unitPrice' });
+                    }
+                }}
+            >
+                {editingCell?.rowId === item.id && editingCell?.field === 'unitPrice' ? (
+                    <input 
+                        autoFocus
+                        type="number"
+                        className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                        value={item.unitPrice}
+                        draggable={false}
+                        onDragStart={preventDrag}
+                        onChange={(e) => onUpdateField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        onFocus={handleFocusSelect}
+                        onBlur={() => {
+                            onInputBlur();
+                            onSetEditingCell(null);
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                ) : (
+                    <div 
+                        className="w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default outline-none"
+                        tabIndex={0}
+                        draggable={false}
+                        onDragStart={preventDrag}
+                        onFocus={() => onSetEditingCell({ rowId: item.id, field: 'unitPrice' })}
+                    >
+                        {formatCurrency(item.unitPrice)}
+                    </div>
+                )}
+            </td>
+
+            {/* TOTAL */}
+            <td 
+                className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums cursor-cell select-none ${
+                    isInSelection 
+                        ? 'bg-blue-600 text-white font-bold' 
+                        : effectiveTotal === 0 ? 'bg-red-100 text-red-600 font-medium' : 'text-slate-800 bg-slate-50/50'
+                }`}
+                data-col="total"
+                onMouseDown={(e) => onCellMouseDown(index, e)}
+                onMouseEnter={() => onCellMouseEnter(index)}
+            >
+                {formatCurrency(effectiveTotal)}
+            </td>
+
+            {/* OBSERVATIONS */}
+            <td className="border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <textarea 
+                    rows={1}
+                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    value={item.observations || ''}
+                    draggable={false}
+                    onDragStart={preventDrag}
+                    onChange={(e) => {
+                        onUpdateField(item.id, 'observations', e.target.value);
+                        adjustTextareaHeight(e);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                        }
+                    }}
+                    placeholder="..."
+                    onFocus={(e) => {
+                        handleFocusSelect(e);
+                        onSetSelectedRow(item.id);
+                        adjustTextareaHeight(e);
+                    }}
+                    onBlur={onInputBlur}
+                />
+            </td>
+
+            {/* ACTIONS */}
+            <td className="border-l border-slate-200 p-0 text-center bg-slate-50 align-top">
+                <div className="flex items-center justify-center pt-3 gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onAddEmpty(item.id); }}
+                        className="p-2 hover:bg-emerald-100 text-emerald-600 rounded transition-colors"
+                        title="Insertar fila vacía debajo"
+                    >
+                        <Plus className="w-5 h-5" />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                        className="p-2 hover:bg-red-100 text-red-600 rounded transition-colors"
+                        title="Eliminar fila"
+                    >
+                        <Trash2 className="w-5 h-5" />
+                    </button>
+                </div>
+            </td>
+        </tr>
+    );
+}, (prev, next) => {
+    // Custom Deep Compare for Performance
+    if (prev.item !== next.item) return false;
+    if (prev.isChecked !== next.isChecked) return false;
+    if (prev.isSelected !== next.isSelected) return false;
+    if (prev.isInSelection !== next.isInSelection) return false;
+    if (prev.isAveria !== next.isAveria) return false;
+    if (prev.searchTerm !== next.searchTerm) return false;
+    
+    // Check editing cell
+    const prevEdit = prev.editingCell;
+    const nextEdit = next.editingCell;
+    if (prevEdit !== nextEdit) {
+        if (!prevEdit || !nextEdit) return false; // One is null, changed
+        if (prevEdit.rowId === prev.item.id || nextEdit.rowId === next.item.id) return false; // Changed related to this row
+    }
+
+    // Check active search (only if relevant to this row)
+    const prevSearch = prev.activeSearch;
+    const nextSearch = next.activeSearch;
+    if (prevSearch !== nextSearch) {
+        if (!prevSearch || !nextSearch) return false;
+        if (prevSearch.rowId === prev.item.id || nextSearch.rowId === next.item.id) return false;
+    }
+
+    return true; // Props equal, skip render
+});
 
 // --- DRAGGABLE CALCULATOR COMPONENT ---
 const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -492,39 +865,20 @@ const App: React.FC = () => {
 
   // Handlers for Continuous Inputs (Text/Number fields)
   // Saves history only when the user finishes editing (onBlur) and if value actually changed.
-  const handleInputFocus = () => {
+  const handleInputFocus = useCallback(() => {
       if (state) {
         historySnapshot.current = state;
       }
-  };
+  }, [state]);
 
-  const handleInputBlur = () => {
+  const handleInputBlur = useCallback(() => {
       // Only save if there was a change and we have a valid snapshot
       if (historySnapshot.current && state && historySnapshot.current !== state) {
            // We save the SNAPSHOT (clean state) to history, so undo brings us back to before typing
            saveHistory(historySnapshot.current);
       }
       historySnapshot.current = null;
-  };
-
-  // --- AGGRESSIVE SELECTION HELPER ---
-  // Only triggered on FOCUS events.
-  // This allows the initial click/tab to select everything.
-  // Subsequent clicks (when already focused) will not trigger this, allowing the user to place the caret.
-  const handleFocusSelect = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      // Always save history snapshot on focus
-      handleInputFocus();
-      
-      const target = e.currentTarget;
-      // Immediate select
-      target.select();
-      
-      // Delayed select to override browser's default caret placement on the INITIAL click/focus
-      // This timeout ensures that after the 'mouseup' event sets the caret, we re-select all.
-      setTimeout(() => {
-          target.select();
-      }, 50);
-  };
+  }, [state]);
 
   // Keyboard Shortcuts for Undo/Redo
   useEffect(() => {
@@ -726,7 +1080,7 @@ const App: React.FC = () => {
   };
 
   // --- CHECKBOX LOGIC (INTEGRATED INTO HISTORY) ---
-  const toggleRowCheck = (id: string) => {
+  const toggleRowCheck = useCallback((id: string) => {
       saveHistory(state); // Save before change
       setState(prev => {
           if (!prev) return prev;
@@ -738,7 +1092,7 @@ const App: React.FC = () => {
           }
           return { ...prev, checkedRowIds: newSet };
       });
-  };
+  }, [state]);
 
   const toggleAllChecks = () => {
       saveHistory(state); // Save before change
@@ -1429,17 +1783,6 @@ const App: React.FC = () => {
     });
   };
 
-  // --- INLINE SEARCH HELPER ---
-  const getInlineSearchResults = (term: string) => {
-      if (!term || term.length < 2 || !state) return [];
-      const lowerTerm = term.toLowerCase();
-      // Limit results to 50 to prevent render lag when deleting text (broadening search)
-      return state.masterItems.filter(i => 
-        i.code.toLowerCase().includes(lowerTerm) || 
-        i.description.toLowerCase().includes(lowerTerm)
-      ).slice(0, 50);
-  };
-
   // --- EXCEL SELECTION HANDLERS ---
   const handleCellMouseDown = (index: number, e: React.MouseEvent) => {
       if (e.button !== 0) return; // Only left click
@@ -1514,20 +1857,47 @@ const App: React.FC = () => {
     setActiveSearch(null);
   };
 
-  // Auto-resize textarea height
-  const adjustTextareaHeight = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const target = e.target;
-      // Use requestAnimationFrame to avoid synchronous layout thrashing during typing
-      requestAnimationFrame(() => {
-          target.style.height = 'auto';
-          target.style.height = `${target.scrollHeight}px`;
-      });
-  };
+  // Row Drag Logic Callbacks
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+      if (searchTerm) { e.preventDefault(); return; }
+      setDraggedRowIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+  }, [searchTerm]);
 
-  const preventDrag = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+      if (searchTerm) return;
       e.preventDefault();
-      e.stopPropagation();
-  };
+      e.dataTransfer.dropEffect = "move";
+      
+      if (tableContainerRef.current) {
+          const { top, bottom } = tableContainerRef.current.getBoundingClientRect();
+          const y = e.clientY;
+          const threshold = 100;
+
+          if (y < top + threshold) {
+              autoScrollSpeed.current = -15;
+          } else if (y > bottom - threshold) {
+              autoScrollSpeed.current = 15;
+          } else {
+              autoScrollSpeed.current = 0;
+          }
+      }
+  }, [searchTerm]);
+
+  const handleDragEnd = useCallback(() => {
+      setDraggedRowIndex(null);
+      autoScrollSpeed.current = 0;
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, index: number) => {
+      if (searchTerm) return;
+      e.preventDefault();
+      autoScrollSpeed.current = 0;
+      if (draggedRowIndex !== null) {
+          moveRow(draggedRowIndex, index);
+          setDraggedRowIndex(null);
+      }
+  }, [draggedRowIndex, moveRow, searchTerm]);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
@@ -1970,330 +2340,44 @@ const App: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-200">
                  {filteredItems.map((item, index) => {
-                   const effectiveTotal = roundToTwo(item.currentQuantity * (state.projectInfo.isAveria ? (item.kFactor || 1) : 1) * item.unitPrice);
-                   
                    // Check if cell is in selection range
                    const isInSelection = selectionRange && index >= Math.min(selectionRange.start, selectionRange.end) && index <= Math.max(selectionRange.start, selectionRange.end);
 
                    return (
-                   <tr 
-                      key={item.id} 
-                      className={`group cursor-default transition-colors ${
-                        selectedRowId === item.id 
-                            ? 'bg-blue-100 border-blue-200' 
-                            : index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
-                      }`}
-                      onClick={() => setSelectedRowId(item.id)}
-                   >
-                     {/* CHECKBOX COLUMN */}
-                     <td className="border-r border-slate-300 text-center bg-transparent align-top pt-4">
-                         <input 
-                            type="checkbox" 
-                            className="w-4 h-4 rounded border-slate-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            checked={state.checkedRowIds.has(item.id)}
-                            onChange={(e) => {
-                                e.stopPropagation(); // Prevent row selection logic
-                                toggleRowCheck(item.id);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                         />
-                     </td>
-
-                     {/* ROW NUMBER / HANDLE - NOW DRAGGABLE (DISABLED IF SEARCHING) */}
-                     <td 
-                        className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 ${!searchTerm ? 'cursor-move hover:text-slate-600 active:text-slate-800' : 'cursor-default opacity-50'} ${selectedRowId === item.id ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
-                        draggable={!searchTerm}
-                        onDragStart={(e) => {
-                            if (searchTerm) { e.preventDefault(); return; }
-                            setDraggedRowIndex(index);
-                            e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onDragOver={(e) => {
-                            if (searchTerm) return;
-                            e.preventDefault(); // Necessary to allow dropping
-                            e.dataTransfer.dropEffect = "move";
-                            
-                            // Auto-scroll logic
-                            if (tableContainerRef.current) {
-                                const { top, bottom } = tableContainerRef.current.getBoundingClientRect();
-                                const y = e.clientY;
-                                const threshold = 100; // Pixels from edge to trigger scroll
-
-                                if (y < top + threshold) {
-                                    // Scroll Up - faster as we get closer to edge
-                                    autoScrollSpeed.current = -15;
-                                } else if (y > bottom - threshold) {
-                                    // Scroll Down
-                                    autoScrollSpeed.current = 15;
-                                } else {
-                                    // Stop scrolling
-                                    autoScrollSpeed.current = 0;
-                                }
-                            }
-                        }}
-                        onDragEnd={() => {
-                            setDraggedRowIndex(null);
-                            autoScrollSpeed.current = 0;
-                        }}
-                        onDrop={(e) => {
-                            if (searchTerm) return;
-                            e.preventDefault();
-                            autoScrollSpeed.current = 0;
-                            if (draggedRowIndex !== null) {
-                                moveRow(draggedRowIndex, index);
-                                setDraggedRowIndex(null);
-                            }
-                        }}
-                        title={searchTerm ? "Reordenar desactivado durante la búsqueda" : "Arrastrar para reordenar fila"}
-                     >
-                        {index + 1}
-                     </td>
-
-                     {/* RECURSO (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
-                     <td 
-                        className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                     >
-                        <textarea 
-                            rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                            value={item.code}
-                            draggable={false}
-                            onDragStart={preventDrag}
-                            onChange={(e) => {
-                                updateField(item.id, 'code', e.target.value);
-                                adjustTextareaHeight(e);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            onFocus={(e) => {
-                                handleFocusSelect(e);
-                                setSelectedRowId(item.id);
-                                setActiveSearch({ rowId: item.id, field: 'code' });
-                                adjustTextareaHeight(e);
-                            }}
-                            onBlur={handleSearchBlur}
-                            placeholder="Buscar..."
-                        />
-                        {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
-                        {activeSearch?.rowId === item.id && activeSearch.field === 'code' && item.code.length > 0 && getInlineSearchResults(item.code).length > 0 && (
-                             <div 
-                                ref={dropdownRef} 
-                                className="absolute left-0 w-[400px] bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
-                                onMouseDown={(e) => e.preventDefault()}
-                             >
-                                 {getInlineSearchResults(item.code).map(res => (
-                                     <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
-                                         <span className="font-bold font-sans text-slate-800">{res.code}</span>
-                                         <span className="truncate flex-1">{res.description}</span>
-                                     </div>
-                                 ))}
-                             </div>
-                        )}
-                     </td>
-
-                     {/* DESCRIPCIÓN (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
-                     <td 
-                        className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                     >
-                        <textarea 
-                            rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                            value={item.description}
-                            draggable={false}
-                            onDragStart={preventDrag}
-                            onChange={(e) => {
-                                updateField(item.id, 'description', e.target.value);
-                                adjustTextareaHeight(e);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            onFocus={(e) => {
-                                handleFocusSelect(e);
-                                setSelectedRowId(item.id);
-                                setActiveSearch({ rowId: item.id, field: 'description' });
-                                adjustTextareaHeight(e);
-                            }}
-                            onBlur={handleSearchBlur}
-                            placeholder="Descripción..."
-                        />
-                         {/* Dropdown de búsqueda - SIEMPRE HACIA ABAJO */}
-                         {activeSearch?.rowId === item.id && activeSearch.field === 'description' && item.description.length > 1 && getInlineSearchResults(item.description).length > 0 && (
-                             <div 
-                                ref={dropdownRef} 
-                                className="absolute left-0 w-full bg-white border border-slate-300 shadow-xl z-50 max-h-60 overflow-y-auto rounded-sm top-full mt-1"
-                                onMouseDown={(e) => e.preventDefault()}
-                             >
-                                 {getInlineSearchResults(item.description).map(res => (
-                                     <div key={res.id} onClick={() => fillRowWithMaster(item.id, res)} className="px-3 py-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 text-base flex gap-2">
-                                         <span className="font-bold font-sans text-slate-500">{res.code}</span>
-                                         <span className="truncate flex-1">{res.description}</span>
-                                     </div>
-                                 ))}
-                             </div>
-                        )}
-                     </td>
-                     
-                     {/* MAIN INPUT: QUANTITY */}
-                     <td 
-                        className="border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                     >
-                        <input 
-                          type="number"
-                          className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                          value={item.currentQuantity || ''}
-                          draggable={false}
-                          onDragStart={preventDrag}
-                          placeholder="0"
-                          onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
-                          onFocus={(e) => {
-                              handleFocusSelect(e);
-                              setSelectedRowId(item.id);
-                          }}
-                          onKeyDown={(e) => {
-                              if(e.key === 'Enter') e.currentTarget.blur();
-                          }}
-                          onBlur={handleInputBlur}
-                        />
-                     </td>
-
-                     {/* K FACTOR INPUT (CONDITIONAL) */}
-                     {state.projectInfo.isAveria && (
-                         <td 
-                            className="border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                         >
-                            <input 
-                              type="number"
-                              className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                              value={item.kFactor || 1}
-                              draggable={false}
-                              onDragStart={preventDrag}
-                              step="0.1"
-                              onChange={(e) => updateField(item.id, 'kFactor', parseFloat(e.target.value) || 0)}
-                              onFocus={(e) => {
-                                  handleFocusSelect(e);
-                                  setSelectedRowId(item.id);
-                              }}
-                              onKeyDown={(e) => {
-                                if(e.key === 'Enter') e.currentTarget.blur();
-                              }}
-                              onBlur={handleInputBlur}
-                            />
-                         </td>
-                     )}
-
-                     {/* PRICE INPUT (VIEW/EDIT MODE) */}
-                     <td 
-                        className="border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                        onClick={() => {
-                            if (editingCell?.rowId !== item.id || editingCell?.field !== 'unitPrice') {
-                                setEditingCell({ rowId: item.id, field: 'unitPrice' });
-                            }
-                        }}
-                     >
-                        {editingCell?.rowId === item.id && editingCell?.field === 'unitPrice' ? (
-                            <input 
-                                autoFocus
-                                type="number"
-                                className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                                value={item.unitPrice}
-                                draggable={false}
-                                onDragStart={preventDrag}
-                                onChange={(e) => updateField(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                onFocus={handleFocusSelect}
-                                onBlur={() => {
-                                    handleInputBlur();
-                                    setEditingCell(null);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') e.currentTarget.blur();
-                                }}
-                            />
-                        ) : (
-                            <div 
-                                className="w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default outline-none"
-                                tabIndex={0}
-                                draggable={false}
-                                onDragStart={preventDrag}
-                                onFocus={() => setEditingCell({ rowId: item.id, field: 'unitPrice' })}
-                            >
-                                {formatCurrency(item.unitPrice)}
-                            </div>
-                        )}
-                     </td>
-                     
-                     {/* TOTAL COLUMN - Highlights RED if 0, BLUE if Selected */}
-                     <td 
-                        className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums cursor-cell select-none ${
-                            isInSelection 
-                                ? 'bg-blue-600 text-white font-bold' 
-                                : effectiveTotal === 0 ? 'bg-red-100 text-red-600 font-medium' : 'text-slate-800 bg-slate-50/50'
-                        }`}
-                        data-col="total"
-                        onMouseDown={(e) => handleCellMouseDown(index, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index)}
-                     >
-                       {formatCurrency(effectiveTotal)}
-                     </td>
-
-                     {/* OBSERVATIONS COLUMN - TEXTAREA JUSTIFICADA */}
-                     <td 
-                        className="border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
-                     >
-                        <textarea 
-                            rows={1}
-                            className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
-                            value={item.observations || ''}
-                            draggable={false}
-                            onDragStart={preventDrag}
-                            onChange={(e) => {
-                                updateField(item.id, 'observations', e.target.value);
-                                adjustTextareaHeight(e);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            placeholder="..."
-                            onFocus={(e) => {
-                                handleFocusSelect(e);
-                                setSelectedRowId(item.id);
-                                adjustTextareaHeight(e);
-                            }}
-                            onBlur={handleInputBlur}
-                        />
-                     </td>
-
-                     {/* ACTIONS COLUMN */}
-                     <td className="border-l border-slate-200 p-0 text-center bg-slate-50 align-top">
-                        <div className="flex items-center justify-center pt-3 gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); addEmptyItem(item.id); }}
-                                className="p-2 hover:bg-emerald-100 text-emerald-600 rounded transition-colors"
-                                title="Insertar fila vacía debajo"
-                            >
-                                <Plus className="w-5 h-5" />
-                            </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
-                                className="p-2 hover:bg-red-100 text-red-600 rounded transition-colors"
-                                title="Eliminar fila"
-                            >
-                                <Trash2 className="w-5 h-5" />
-                            </button>
-                        </div>
-                     </td>
-                   </tr>
-                 );})}
+                       <BudgetItemRow 
+                           key={item.id}
+                           item={item}
+                           index={index}
+                           isChecked={state.checkedRowIds.has(item.id)}
+                           isSelected={selectedRowId === item.id}
+                           isInSelection={!!isInSelection}
+                           isAveria={!!state.projectInfo.isAveria}
+                           searchTerm={searchTerm}
+                           activeSearch={activeSearch}
+                           editingCell={editingCell}
+                           masterItems={state.masterItems}
+                           // Callbacks
+                           onToggleCheck={toggleRowCheck}
+                           onSetSelectedRow={setSelectedRowId}
+                           onDragStart={handleDragStart}
+                           onDragOver={handleDragOver}
+                           onDragEnd={handleDragEnd}
+                           onDrop={handleDrop}
+                           onUpdateField={updateField}
+                           onUpdateQuantity={updateQuantity}
+                           onFillRow={fillRowWithMaster}
+                           onAddEmpty={addEmptyItem}
+                           onDelete={deleteItem}
+                           onSetActiveSearch={setActiveSearch}
+                           onSetEditingCell={setEditingCell}
+                           onCellMouseDown={handleCellMouseDown}
+                           onCellMouseEnter={handleCellMouseEnter}
+                           onInputFocus={handleInputFocus}
+                           onInputBlur={handleInputBlur}
+                           dropdownRef={dropdownRef}
+                       />
+                   );
+                 })}
               </tbody>
             </table>
           </div>
