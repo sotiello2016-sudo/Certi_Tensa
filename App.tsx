@@ -5,11 +5,9 @@ import {
   Save,
   Upload, 
   Trash2, 
-  Printer,
   Search,
   X,
   Plus,
-  ArrowDown,
   Eraser,
   Check,
   Download,
@@ -33,8 +31,7 @@ import {
   Info,
   HelpCircle,
   MousePointer2,
-  Keyboard,
-  Layers
+  Keyboard
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -77,13 +74,6 @@ const generateEmptyRows = (count: number): BudgetItem[] => {
         kFactor: 1
     }));
 };
-
-// Selection State Interface
-interface SelectionState {
-    start: { r: number; c: number } | null;
-    end: { r: number; c: number } | null;
-    isDragging: boolean;
-}
 
 // --- DRAGGABLE CALCULATOR COMPONENT ---
 const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -299,13 +289,6 @@ const App: React.FC = () => {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
 
-  // Excel-like Drag Selection State
-  const [selection, setSelection] = useState<SelectionState>({
-      start: null,
-      end: null,
-      isDragging: false
-  });
-
   // Row Reordering Drag State
   const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
 
@@ -334,7 +317,7 @@ const App: React.FC = () => {
     );
   }, [state.items, searchTerm]);
 
-  // --- AUTO-SCROLL LOGIC FOR DRAGGING ROWS AND SELECTION ---
+  // --- AUTO-SCROLL LOGIC FOR ROW REORDERING ---
   useEffect(() => {
     let animationFrameId: number;
 
@@ -1419,129 +1402,6 @@ const App: React.FC = () => {
       return acc + roundToTwo(curr.currentQuantity * k * curr.unitPrice);
   }, 0);
 
-  // --- SELECTION & STATS LOGIC ---
-  
-  // Register mouse up globally to stop dragging AND handle auto-scroll on drag
-  useEffect(() => {
-      const handleWindowMouseUp = () => {
-          if (selection.isDragging) {
-              setSelection(prev => ({ ...prev, isDragging: false }));
-              autoScrollSpeed.current = 0; // Stop scrolling immediately
-          }
-      };
-      
-      const handleWindowMouseMove = (e: MouseEvent) => {
-          if (selection.isDragging && tableContainerRef.current) {
-              const rect = tableContainerRef.current.getBoundingClientRect();
-              const y = e.clientY;
-              const threshold = 100; // Activation zone size in pixels
-              
-              // Check if mouse is near top or bottom of the container
-              if (y < rect.top + threshold) {
-                  // Scroll Up
-                  autoScrollSpeed.current = -15; 
-              } else if (y > rect.bottom - threshold) {
-                  // Scroll Down
-                  autoScrollSpeed.current = 15;
-              } else {
-                  // In the middle zone - stop scrolling
-                  autoScrollSpeed.current = 0;
-              }
-          }
-      };
-
-      window.addEventListener('mouseup', handleWindowMouseUp);
-      window.addEventListener('mousemove', handleWindowMouseMove);
-      
-      return () => {
-          window.removeEventListener('mouseup', handleWindowMouseUp);
-          window.removeEventListener('mousemove', handleWindowMouseMove);
-      };
-  }, [selection.isDragging]);
-
-  const handleCellMouseDown = (r: number, c: number, e: React.MouseEvent) => {
-      // Allow default input focus if it's a left click without movement yet
-      // We set dragging to true, but we reset selection start
-      setSelection({
-          start: { r, c },
-          end: { r, c },
-          isDragging: true
-      });
-  };
-
-  const handleCellMouseEnter = (r: number, c: number) => {
-      if (selection.isDragging && selection.start) {
-          // KEY FIX: Remove native text selection to prevent "blue mess" across cells
-          if (window.getSelection) {
-              window.getSelection()?.removeAllRanges();
-          }
-          setSelection(prev => ({
-              ...prev,
-              end: { r, c }
-          }));
-      }
-  };
-
-  const isCellSelected = (r: number, c: number) => {
-      if (!selection.start || !selection.end) return false;
-      
-      const minR = Math.min(selection.start.r, selection.end.r);
-      const maxR = Math.max(selection.start.r, selection.end.r);
-      const minC = Math.min(selection.start.c, selection.end.c);
-      const maxC = Math.max(selection.start.c, selection.end.c);
-
-      return r >= minR && r <= maxR && c >= minC && c <= maxC;
-  };
-
-  // Calculate stats from selection
-  const selectionStats = useMemo(() => {
-      if (!selection.start || !selection.end || !state) return null;
-      
-      const minR = Math.min(selection.start.r, selection.end.r);
-      const maxR = Math.max(selection.start.r, selection.end.r);
-      const minC = Math.min(selection.start.c, selection.end.c);
-      const maxC = Math.max(selection.start.c, selection.end.c);
-
-      let count = 0;
-      let sum = 0;
-      let hasNumbers = false;
-      const isAveria = state.projectInfo.isAveria;
-
-      for (let r = minR; r <= maxR; r++) {
-          const item = state.items[r];
-          if (!item) continue;
-
-          for (let c = minC; c <= maxC; c++) {
-              count++;
-              // Map visual columns to data values
-              // Adjusted Col Mapping for Averia Mode
-              // Normal: 1:Code, 2:Desc, 3:Qty, 4:Price, 5:Total, 6:Obs
-              // Averia: 1:Code, 2:Desc, 3:Qty, 4:K, 5:Price, 6:Total, 7:Obs
-              let value = 0;
-              let isNum = false;
-
-              if (isAveria) {
-                 if (c === 3) { value = item.currentQuantity; isNum = true; }
-                 else if (c === 4) { value = item.kFactor || 1; isNum = true; }
-                 else if (c === 5) { value = item.unitPrice; isNum = true; }
-                 else if (c === 6) { value = item.totalAmount; isNum = true; }
-              } else {
-                 if (c === 3) { value = item.currentQuantity; isNum = true; }
-                 else if (c === 4) { value = item.unitPrice; isNum = true; }
-                 else if (c === 5) { value = item.totalAmount; isNum = true; }
-              }
-
-              if (isNum) {
-                  sum += value;
-                  hasNumbers = true;
-              }
-          }
-      }
-
-      return { count, sum, hasNumbers };
-
-  }, [selection, state]);
-
   // Event Handlers for UI
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -1997,13 +1857,13 @@ const App: React.FC = () => {
                 {searchTerm ? (
                     <span>Resultados: <span className="text-slate-900 font-bold">{filteredItems.length}</span></span>
                 ) : (
-                     !selectedRowId && <span className="text-slate-400 italic font-normal hidden md:inline">Seleccione una fila para editar o arrastre el ratón para calcular totales</span>
+                     !selectedRowId && <span className="text-slate-400 italic font-normal hidden md:inline">Seleccione una fila para editar</span>
                 )}
              </div>
           </div>
 
           {/* GRID PRINCIPAL */}
-          <div ref={tableContainerRef} className={`flex-1 overflow-auto relative bg-slate-100/50 ${selection.isDragging ? 'select-none' : ''}`}>
+          <div ref={tableContainerRef} className="flex-1 overflow-auto relative bg-slate-100/50">
             <table className="w-full border-collapse text-base table-fixed min-w-[1050px] bg-white">
               <thead className="sticky top-0 z-10 bg-orange-100 text-orange-900 font-semibold border-b border-orange-200 shadow-sm">
                  <tr className="text-base uppercase tracking-wider">
@@ -2061,7 +1921,6 @@ const App: React.FC = () => {
                             if (searchTerm) { e.preventDefault(); return; }
                             setDraggedRowIndex(index);
                             e.dataTransfer.effectAllowed = "move";
-                            // Optional: Transparent ghost image if needed, but browser default is usually fine for rows
                         }}
                         onDragOver={(e) => {
                             if (searchTerm) return;
@@ -2106,9 +1965,7 @@ const App: React.FC = () => {
 
                      {/* RECURSO (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 1) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, 1, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, 1)}
+                        className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                      >
                         <textarea 
                             rows={1}
@@ -2148,9 +2005,7 @@ const App: React.FC = () => {
 
                      {/* DESCRIPCIÓN (Con Búsqueda Inline) - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 2) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, 2, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, 2)}
+                        className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                      >
                         <textarea 
                             rows={1}
@@ -2190,9 +2045,7 @@ const App: React.FC = () => {
                      
                      {/* MAIN INPUT: QUANTITY */}
                      <td 
-                        className={`border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 3) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, 3, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, 3)}
+                        className="border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                      >
                         <input 
                           type="number"
@@ -2214,9 +2067,7 @@ const App: React.FC = () => {
                      {/* K FACTOR INPUT (CONDITIONAL) */}
                      {state.projectInfo.isAveria && (
                          <td 
-                            className={`border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                            onMouseDown={(e) => handleCellMouseDown(index, 4, e)}
-                            onMouseEnter={() => handleCellMouseEnter(index, 4)}
+                            className="border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                          >
                             <input 
                               type="number"
@@ -2238,9 +2089,7 @@ const App: React.FC = () => {
 
                      {/* PRICE INPUT (VIEW/EDIT MODE) */}
                      <td 
-                        className={`border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, state.projectInfo.isAveria ? 5 : 4) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 5 : 4, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 5 : 4)}
+                        className="border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                         onClick={() => {
                             if (editingCell?.rowId !== item.id || editingCell?.field !== 'unitPrice') {
                                 setEditingCell({ rowId: item.id, field: 'unitPrice' });
@@ -2276,18 +2125,14 @@ const App: React.FC = () => {
                      
                      {/* TOTAL COLUMN - Highlights RED if 0 */}
                      <td 
-                        className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums ${effectiveTotal === 0 ? 'bg-red-100 text-red-600 font-medium' : 'text-slate-800 bg-slate-50/50'} ${isCellSelected(index, state.projectInfo.isAveria ? 6 : 5) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 6 : 5, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 6 : 5)}
+                        className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums ${effectiveTotal === 0 ? 'bg-red-100 text-red-600 font-medium' : 'text-slate-800 bg-slate-50/50'}`}
                      >
                        {formatCurrency(effectiveTotal)}
                      </td>
 
                      {/* OBSERVATIONS COLUMN - TEXTAREA JUSTIFICADA */}
                      <td 
-                        className={`border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${isCellSelected(index, state.projectInfo.isAveria ? 7 : 6) ? 'bg-blue-200/50 ring-2 ring-inset ring-blue-500 z-10' : ''}`}
-                        onMouseDown={(e) => handleCellMouseDown(index, state.projectInfo.isAveria ? 7 : 6, e)}
-                        onMouseEnter={() => handleCellMouseEnter(index, state.projectInfo.isAveria ? 7 : 6)}
+                        className="border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
                      >
                         <textarea 
                             rows={1}
@@ -2639,24 +2484,6 @@ const App: React.FC = () => {
             <span>{state.masterItems.length} Refs</span>
             <span>{state.items.length} Filas</span>
             <span>{state.checkedRowIds.size} Marcadas</span>
-            
-            {/* SELECTION STATS DISPLAY */}
-            {selectionStats && selectionStats.count > 0 && (
-                <>
-                    <div className="h-4 w-px bg-slate-300 mx-1"></div>
-                    <div className="flex items-center gap-4 text-slate-700 font-semibold animate-in fade-in">
-                        <span className="flex items-center gap-1">
-                             Recuento: {selectionStats.count}
-                        </span>
-                        {selectionStats.hasNumbers && (
-                             <span className="flex items-center gap-1">
-                                <Calculator className="w-3 h-3 text-slate-400" />
-                                Suma: {formatNumber(selectionStats.sum)}
-                             </span>
-                        )}
-                    </div>
-                </>
-            )}
          </div>
          <div className="font-mono opacity-50">
             v4.4 Professional
