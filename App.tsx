@@ -1403,11 +1403,11 @@ const App: React.FC = () => {
   const getInlineSearchResults = (term: string) => {
       if (!term || term.length < 2 || !state) return [];
       const lowerTerm = term.toLowerCase();
-      // REMOVED .slice(0, 10) to show all results as requested
+      // Limit results to 50 to prevent render lag when deleting text (broadening search)
       return state.masterItems.filter(i => 
         i.code.toLowerCase().includes(lowerTerm) || 
         i.description.toLowerCase().includes(lowerTerm)
-      );
+      ).slice(0, 50);
   };
 
   // SAFEGUARD: If state is null (e.g. during heavy operations or initialization glitches), do not render
@@ -1578,8 +1578,12 @@ const App: React.FC = () => {
 
   // Auto-resize textarea height
   const adjustTextareaHeight = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      e.target.style.height = 'auto';
-      e.target.style.height = `${e.target.scrollHeight}px`;
+      const target = e.target;
+      // Use requestAnimationFrame to avoid synchronous layout thrashing during typing
+      requestAnimationFrame(() => {
+          target.style.height = 'auto';
+          target.style.height = `${target.scrollHeight}px`;
+      });
   };
 
   return (
@@ -2679,3 +2683,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+    
