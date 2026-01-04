@@ -657,14 +657,17 @@ const App: React.FC = () => {
   const autoScrollSpeed = useRef<number>(0);
   
   // --- EXCEL SELECTION STATE ---
-  const [selectionRange, setSelectionRange] = useState<{ start: number, end: number } | null>(null);
+  const [selectedCellIndices, setSelectedCellIndices] = useState<Set<number>>(new Set());
   const [isSelectingCells, setIsSelectingCells] = useState(false);
   const selectionScrollSpeed = useRef<number>(0);
   
   // REFS FOR INTERACTION STATE (To fix stale closure in memoized rows)
   const isSelectingCellsRef = useRef(false);
-  const selectionRangeRef = useRef<{ start: number, end: number } | null>(null);
+  const selectionAnchorRef = useRef<number | null>(null);
+  const selectionSnapshotRef = useRef<Set<number>>(new Set());
   const draggedRowIndexRef = useRef<number | null>(null);
+  // NEW REF: Track current selection so handleCellMouseDown doesn't need to depend on state (preventing row re-renders)
+  const selectedCellIndicesRef = useRef<Set<number>>(new Set());
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -695,6 +698,31 @@ const App: React.FC = () => {
         (i.observations && i.observations.toLowerCase().includes(lower))
     );
   }, [state.items, searchTerm]);
+
+  // --- KEYBOARD LISTENER (ESC to Deselect) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            // Clear both State and Ref for ESC
+            setSelectedCellIndices(new Set());
+            selectedCellIndicesRef.current = new Set();
+            setIsSelectingCells(false);
+            isSelectingCellsRef.current = false;
+        }
+        // Undo/Redo is handled in the other useEffect or could be merged
+        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) redo();
+            else undo();
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+             e.preventDefault();
+             redo();
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [history, state]);
 
   // --- AUTO-SCROLL LOGIC FOR ROW REORDERING & CELL SELECTION ---
   useEffect(() => {
@@ -886,23 +914,6 @@ const App: React.FC = () => {
       }
       historySnapshot.current = null;
   }, [state]);
-
-  // Keyboard Shortcuts for Undo/Redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-            e.preventDefault();
-            if (e.shiftKey) redo();
-            else undo();
-        }
-        if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
-             e.preventDefault();
-             redo();
-        }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, state]);
 
   // --- PERSISTENCE (SAVE/LOAD) LOGIC ---
   const handleSaveProject = () => {
@@ -1804,37 +1815,55 @@ const App: React.FC = () => {
       
       setIsSelectingCells(true);
       isSelectingCellsRef.current = true;
-      
-      const range = { start: index, end: index };
-      setSelectionRange(range);
-      selectionRangeRef.current = range;
-  }, []);
+      selectionAnchorRef.current = index;
+
+      if (e.ctrlKey || e.metaKey) {
+          // Use REF to get current selection without stale closure
+          const currentSelection = selectedCellIndicesRef.current;
+          
+          // Snapshot for drag operations (base + anchor)
+          selectionSnapshotRef.current = new Set(currentSelection);
+          
+          const newSet = new Set(currentSelection);
+          newSet.add(index);
+          
+          setSelectedCellIndices(newSet);
+          selectedCellIndicesRef.current = newSet; // Sync Ref immediately
+      } else {
+          selectionSnapshotRef.current = new Set();
+          const newSet = new Set([index]);
+          setSelectedCellIndices(newSet);
+          selectedCellIndicesRef.current = newSet; // Sync Ref
+      }
+  }, []); // No dependencies! Uses refs to avoid re-renders of all rows
 
   const handleCellMouseEnter = useCallback((index: number) => {
       // Use refs to check state without needing re-render or closure update
-      if (isSelectingCellsRef.current && selectionRangeRef.current) {
-          const newRange = { ...selectionRangeRef.current, end: index };
-          setSelectionRange(newRange);
-          selectionRangeRef.current = newRange;
+      if (isSelectingCellsRef.current && selectionAnchorRef.current !== null) {
+          const start = Math.min(selectionAnchorRef.current, index);
+          const end = Math.max(selectionAnchorRef.current, index);
+          
+          const newSet = new Set(selectionSnapshotRef.current);
+          for (let i = start; i <= end; i++) {
+              newSet.add(i);
+          }
+          setSelectedCellIndices(newSet);
+          selectedCellIndicesRef.current = newSet; 
       }
   }, []);
 
   // Calculate Selection Sum
   const selectedSum = useMemo(() => {
-      if (!selectionRange) return 0;
-      const start = Math.min(selectionRange.start, selectionRange.end);
-      const end = Math.max(selectionRange.start, selectionRange.end);
-      
       let sum = 0;
-      for (let i = start; i <= end; i++) {
-          const item = filteredItems[i];
+      selectedCellIndices.forEach(index => {
+          const item = filteredItems[index];
           if (item) {
               const k = state.projectInfo.isAveria ? (item.kFactor || 1) : 1;
               sum += roundToTwo(item.currentQuantity * k * item.unitPrice);
           }
-      }
+      });
       return sum;
-  }, [selectionRange, filteredItems, state.projectInfo.isAveria]);
+  }, [selectedCellIndices, filteredItems, state.projectInfo.isAveria]);
 
   // SAFEGUARD: If state is null (e.g. during heavy operations or initialization glitches), do not render
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
@@ -1866,7 +1895,8 @@ const App: React.FC = () => {
       // If clicking outside the total column, clear the selection range
       const target = e.target as HTMLElement;
       if (!target.closest('td[data-col="total"]')) {
-          setSelectionRange(null);
+          setSelectedCellIndices(new Set());
+          selectedCellIndicesRef.current = new Set();
       }
     };
     
@@ -2387,7 +2417,8 @@ const App: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                  {filteredItems.map((item, index) => {
                    // Check if cell is in selection range
-                   const isInSelection = selectionRange && index >= Math.min(selectionRange.start, selectionRange.end) && index <= Math.max(selectionRange.start, selectionRange.end);
+                   // Updated logic: Check if index is in the Set
+                   const isInSelection = selectedCellIndices.has(index);
 
                    return (
                        <BudgetItemRow 
@@ -2396,7 +2427,7 @@ const App: React.FC = () => {
                            index={index}
                            isChecked={state.checkedRowIds.has(item.id)}
                            isSelected={selectedRowId === item.id}
-                           isInSelection={!!isInSelection}
+                           isInSelection={isInSelection}
                            isAveria={!!state.projectInfo.isAveria}
                            searchTerm={searchTerm}
                            activeSearch={activeSearch}
