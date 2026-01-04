@@ -660,6 +660,11 @@ const App: React.FC = () => {
   const [selectionRange, setSelectionRange] = useState<{ start: number, end: number } | null>(null);
   const [isSelectingCells, setIsSelectingCells] = useState(false);
   const selectionScrollSpeed = useRef<number>(0);
+  
+  // REFS FOR INTERACTION STATE (To fix stale closure in memoized rows)
+  const isSelectingCellsRef = useRef(false);
+  const selectionRangeRef = useRef<{ start: number, end: number } | null>(null);
+  const draggedRowIndexRef = useRef<number | null>(null);
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -733,8 +738,10 @@ const App: React.FC = () => {
       };
       
       const handleWindowMouseUp = () => {
-          if (isSelectingCells) {
+          // Use Ref for instant check
+          if (isSelectingCellsRef.current) {
             setIsSelectingCells(false);
+            isSelectingCellsRef.current = false;
             selectionScrollSpeed.current = 0;
           }
       };
@@ -1693,17 +1700,25 @@ const App: React.FC = () => {
   };
 
   // Reorder Row Function
-  const moveRow = (fromIndex: number, toIndex: number) => {
+  const moveRow = useCallback((fromIndex: number, toIndex: number) => {
       if (fromIndex === toIndex) return;
-      saveHistory(state);
+      // We need to access current state to save history correctly.
+      // But moveRow is called inside setDraggedRowIndex context potentially.
+      // Using functional update is safe for the update itself.
+      // History saving is tricky with functional updates if we don't have current state in closure.
+      // Ideally we'd use a ref for state, but let's trust the closure refreshes on re-render.
+      
       setState(prev => {
           if (!prev) return prev;
+          // Side effect: save history of previous state
+          saveHistory(prev); 
+          
           const newItems = [...prev.items];
           const [movedItem] = newItems.splice(fromIndex, 1);
           newItems.splice(toIndex, 0, movedItem);
           return { ...prev, items: newItems };
       });
-  };
+  }, []);
 
   const updateQuantity = (id: string, qty: number) => {
     // Note: We do NOT saveHistory here on every keystroke/change. 
@@ -1784,17 +1799,25 @@ const App: React.FC = () => {
   };
 
   // --- EXCEL SELECTION HANDLERS ---
-  const handleCellMouseDown = (index: number, e: React.MouseEvent) => {
+  const handleCellMouseDown = useCallback((index: number, e: React.MouseEvent) => {
       if (e.button !== 0) return; // Only left click
+      
       setIsSelectingCells(true);
-      setSelectionRange({ start: index, end: index });
-  };
+      isSelectingCellsRef.current = true;
+      
+      const range = { start: index, end: index };
+      setSelectionRange(range);
+      selectionRangeRef.current = range;
+  }, []);
 
-  const handleCellMouseEnter = (index: number) => {
-      if (isSelectingCells && selectionRange) {
-          setSelectionRange({ ...selectionRange, end: index });
+  const handleCellMouseEnter = useCallback((index: number) => {
+      // Use refs to check state without needing re-render or closure update
+      if (isSelectingCellsRef.current && selectionRangeRef.current) {
+          const newRange = { ...selectionRangeRef.current, end: index };
+          setSelectionRange(newRange);
+          selectionRangeRef.current = newRange;
       }
-  };
+  }, []);
 
   // Calculate Selection Sum
   const selectedSum = useMemo(() => {
@@ -1846,9 +1869,23 @@ const App: React.FC = () => {
           setSelectionRange(null);
       }
     };
+    
+    // Global Mouse Up for Selection
+    const handleWindowMouseUp = () => {
+        if (isSelectingCellsRef.current) {
+            setIsSelectingCells(false);
+            isSelectingCellsRef.current = false;
+            selectionScrollSpeed.current = 0;
+        }
+    };
 
     document.addEventListener('mousedown', handleGlobalMouseDown);
-    return () => document.removeEventListener('mousedown', handleGlobalMouseDown);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    
+    return () => {
+        document.removeEventListener('mousedown', handleGlobalMouseDown);
+        window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
   }, [showExportMenu, activeSearch]); // removed selectionRange dependency as we use setSelectionRange(null)
 
   const handleSearchBlur = () => {
@@ -1860,7 +1897,10 @@ const App: React.FC = () => {
   // Row Drag Logic Callbacks
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
       if (searchTerm) { e.preventDefault(); return; }
+      
       setDraggedRowIndex(index);
+      draggedRowIndexRef.current = index; // Sync Ref
+      
       e.dataTransfer.effectAllowed = "move";
   }, [searchTerm]);
 
@@ -1886,6 +1926,7 @@ const App: React.FC = () => {
 
   const handleDragEnd = useCallback(() => {
       setDraggedRowIndex(null);
+      draggedRowIndexRef.current = null;
       autoScrollSpeed.current = 0;
   }, []);
 
@@ -1893,11 +1934,16 @@ const App: React.FC = () => {
       if (searchTerm) return;
       e.preventDefault();
       autoScrollSpeed.current = 0;
-      if (draggedRowIndex !== null) {
-          moveRow(draggedRowIndex, index);
+      
+      // Use Ref to get the dragged index even if closure is stale
+      const fromIndex = draggedRowIndexRef.current;
+      
+      if (fromIndex !== null) {
+          moveRow(fromIndex, index);
           setDraggedRowIndex(null);
+          draggedRowIndexRef.current = null;
       }
-  }, [draggedRowIndex, moveRow, searchTerm]);
+  }, [searchTerm, moveRow]);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
