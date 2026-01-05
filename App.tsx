@@ -70,6 +70,7 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
 
 const STORAGE_KEY = 'certipro_autosave_v1';
 const SECURITY_STORAGE_KEY = 'certipro_allowed_ips_v1';
+const ADMIN_PASSWORD_STORAGE_KEY = 'certipro_admin_password_v1'; // New storage key for admin password
 
 // Helper to generate N empty rows
 const generateEmptyRows = (count: number): BudgetItem[] => {
@@ -612,10 +613,22 @@ const App: React.FC = () => {
           return saved ? JSON.parse(saved) : [];
       } catch (e) { return []; }
   });
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+      try {
+          const saved = localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY);
+          return saved || '3229'; // Default password
+      } catch (e) { return '3229'; }
+  });
   const [showSettingsLogin, setShowSettingsLogin] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settingsPassword, setSettingsPassword] = useState('');
+  const [loginPasswordAttempt, setLoginPasswordAttempt] = useState('');
   const [ipInput, setIpInput] = useState('');
+
+  // Password change state
+  const [oldPasswordInput, setOldPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState('');
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   // Fetch IP
   useEffect(() => {
@@ -633,6 +646,11 @@ const App: React.FC = () => {
     localStorage.setItem(SECURITY_STORAGE_KEY, JSON.stringify(allowedIPs));
   }, [allowedIPs]);
 
+  // Persist admin password
+  useEffect(() => {
+    localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, adminPassword);
+  }, [adminPassword]);
+
   const isAccessAllowed = useMemo(() => {
     if (!currentIP) return false; // Loading IP or error
     if (allowedIPs.length === 0) return false; // No allowed IPs configured, block all
@@ -641,10 +659,11 @@ const App: React.FC = () => {
 
   const handleSettingsLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (settingsPassword === '3229') {
+    if (loginPasswordAttempt === adminPassword) {
         setShowSettingsLogin(false);
-        setSettingsPassword('');
+        setLoginPasswordAttempt('');
         setShowSettingsModal(true);
+        setPasswordChangeMessage(null); // Clear previous messages
     } else {
         alert("Contraseña incorrecta");
     }
@@ -659,6 +678,30 @@ const App: React.FC = () => {
 
   const handleRemoveIP = (ip: string) => {
       setAllowedIPs(prev => prev.filter(item => item !== ip));
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+      e.preventDefault();
+      setPasswordChangeMessage(null);
+
+      if (oldPasswordInput !== adminPassword) {
+          setPasswordChangeMessage({type: 'error', text: 'La contraseña actual es incorrecta.'});
+          return;
+      }
+      if (!newPasswordInput) {
+          setPasswordChangeMessage({type: 'error', text: 'La nueva contraseña no puede estar vacía.'});
+          return;
+      }
+      if (newPasswordInput !== confirmNewPasswordInput) {
+          setPasswordChangeMessage({type: 'error', text: 'La nueva contraseña y la confirmación no coinciden.'});
+          return;
+      }
+
+      setAdminPassword(newPasswordInput);
+      setOldPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmNewPasswordInput('');
+      setPasswordChangeMessage({type: 'success', text: 'Contraseña actualizada con éxito.'});
   };
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -1647,7 +1690,7 @@ const App: React.FC = () => {
                      <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Fecha</label><input type="date" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.date} onChange={(e) => updateProjectInfo('date', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
                      <div className="col-span-2 text-right"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total Acumulado</label><div className="text-3xl font-sans font-bold text-emerald-700 leading-none pb-1 tabular-nums">{formatCurrency(totalAmount)}</div></div>
                      {state.projectInfo.isAveria && (
-                       <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm"><div className="flex items-center gap-2 mb-3 text-red-800 font-bold uppercase text-sm border-b border-red-200 pb-1"><AlertTriangle className="w-4 h-4" /> Detalles de la Avería</div><div className="grid grid-cols-12 gap-6"><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><div className="relative"><Hash className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="text" autoFocus className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" placeholder="Axxxxx..." value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><div className="relative"><Calendar className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="date" className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><div className="flex items-center gap-1 mb-1"><label className="block text-xs font-bold text-red-600 uppercase">Horario</label><div className="group relative z-10"><Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors cursor-help" /><div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-bottom scale-95 group-hover:scale-100"><div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /><span className="font-bold text-slate-700 text-sm">Horarios y Coeficientes</span></div><div className="p-4 space-y-4"><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-orange-400 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Diurno</span><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-orange-200">K = 1,25</span></div><p className="text-xs text-slate-500 leading-relaxed">Lunes a Viernes laborables de <span className="font-semibold text-slate-700">07:00</span> a <span className="font-semibold text-slate-700">19:00h</span>.</p></div><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-indigo-500 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Nocturno / Finde</span><span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-indigo-200">K = 1,75</span></div><p className="text-xs text-slate-500 leading-relaxed">Resto de horas, fines de semana y festivos.</p></div></div><div className="absolute top-full left-1/2 -translate-x-1/2 -mt-2 w-4 h-4 bg-white border-r border-b border-slate-100 transform rotate-45 rounded-sm"></div></div></div></div><div className="relative"><Clock className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><select className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium appearance-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select><ChevronDown className="w-4 h-4 absolute right-2 top-2.5 text-red-300 pointer-events-none" /></div></div><div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><div className="relative"><AlignLeft className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><textarea rows={2} className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div></div></div>
+                       <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm"><div className="flex items-center gap-2 mb-3 text-red-800 font-bold uppercase text-sm border-b border-red-200 pb-1"><AlertTriangle className="w-4 h-4" /> Detalles de la Avería</div><div className="grid grid-cols-12 gap-6"><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><div className="relative"><Hash className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="text" autoFocus className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" placeholder="Axxxxx..." value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><div className="relative"><Calendar className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="date" className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><div className="flex items-center gap-1 mb-1"><label className="block text-xs font-bold text-red-600 uppercase">Horario</label><div className="group relative z-10"><Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors cursor-help" /><div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-bottom scale-95 group-hover:scale-100"><div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /><span className="font-bold text-slate-700 text-sm">Horarios y Coeficientes</span></div><div className="p-4 space-y-4"><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-orange-400 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Diurno</span><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-orange-200">K = 1,25</span></div><p className="text-xs text-slate-500 leading-relaxed">Lunes a Viernes laborables de <span className="font-semibold text-slate-700">07:00</span> a <span className="font-semibold text-slate-700">19:00h</span>.</p></div><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-indigo-500 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Nocturno / Finde</span><span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-indigo-200">K = 1,75</span></div><p className="text-xs text-slate-500 leading-relaxed">Resto de horas, fines de semana y festivos.</p></div></div><div className="absolute top-full left-1/2 -translate-x-1/2 -mt-2 w-4 h-4 bg-white border-r border-b border-slate-100 transform rotate-45 rounded-sm"></div></div></div></div><div className="relative"><Clock className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><select className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium appearance-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputFocus}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select><ChevronDown className="w-4 h-4 absolute right-2 top-2.5 text-red-300 pointer-events-none" /></div></div><div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><div className="relative"><AlignLeft className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><textarea rows={2} className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputFocus} /></div></div></div></div>
                      )}
                  </div>
              </div>
@@ -1819,8 +1862,8 @@ const App: React.FC = () => {
                         type="password" 
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all mb-6 text-center text-lg tracking-widest"
                         placeholder="••••"
-                        value={settingsPassword}
-                        onChange={(e) => setSettingsPassword(e.target.value)}
+                        value={loginPasswordAttempt}
+                        onChange={(e) => setLoginPasswordAttempt(e.target.value)}
                       />
                       <div className="flex gap-3">
                           <button type="button" onClick={() => setShowSettingsLogin(false)} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-lg transition-colors">Cancelar</button>
@@ -1839,8 +1882,8 @@ const App: React.FC = () => {
                       <div className="flex items-center gap-3">
                           <div className="bg-slate-100 p-2 rounded-lg text-slate-700"><Settings className="w-6 h-6" /></div>
                           <div>
-                              <h2 className="text-xl font-bold text-slate-900">Control de Acceso IP</h2>
-                              <p className="text-sm text-slate-500">Gestione las direcciones autorizadas para usar la aplicación.</p>
+                              <h2 className="text-xl font-bold text-slate-900">Control de Acceso y Ajustes</h2>
+                              <p className="text-sm text-slate-500">Gestione direcciones IP autorizadas y la contraseña de administrador.</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-50 rounded-full transition-colors"><X className="w-6 h-6" /></button>
@@ -1874,7 +1917,7 @@ const App: React.FC = () => {
                           </div>
                       </div>
 
-                      <div>
+                      <div className="mb-6">
                           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">IPs Autorizadas ({allowedIPs.length})</h4>
                           {allowedIPs.length === 0 ? (
                               <div className="text-center py-8 text-slate-400 bg-slate-100 rounded-xl border border-dashed border-slate-300">
@@ -1897,9 +1940,54 @@ const App: React.FC = () => {
                               </div>
                           )}
                       </div>
+
+                      {/* Change Password Section */}
+                      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Cambiar Contraseña de Administrador</h4>
+                          <form onSubmit={handleChangePassword} className="space-y-4">
+                              <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña Actual</label>
+                                  <input 
+                                    type="password" 
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    value={oldPasswordInput}
+                                    onChange={(e) => setOldPasswordInput(e.target.value)}
+                                    placeholder="Contraseña actual"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">Nueva Contraseña</label>
+                                  <input 
+                                    type="password" 
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    value={newPasswordInput}
+                                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                                    placeholder="Nueva contraseña"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">Confirmar Nueva Contraseña</label>
+                                  <input 
+                                    type="password" 
+                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    value={confirmNewPasswordInput}
+                                    onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
+                                    placeholder="Confirmar nueva contraseña"
+                                  />
+                              </div>
+                              {passwordChangeMessage && (
+                                <div className={`p-3 rounded-lg text-sm font-medium ${passwordChangeMessage.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                    {passwordChangeMessage.text}
+                                </div>
+                              )}
+                              <button type="submit" className="w-full px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-lg flex items-center justify-center gap-2">
+                                <Lock className="w-4 h-4" /> Cambiar Contraseña
+                              </button>
+                          </form>
+                      </div>
                   </div>
                   <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
-                      <button onClick={() => setShowSettingsModal(false)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-colors shadow-lg">Guardar y Cerrar</button>
+                      <button onClick={() => setShowSettingsModal(false)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-colors shadow-lg">Cerrar</button>
                   </div>
               </div>
           </div>
