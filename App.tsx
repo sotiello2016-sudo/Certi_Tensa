@@ -41,9 +41,10 @@ import {
   HardDrive,
   Settings,
   Lock,
-  ShieldAlert,
   Globe,
-  PlusCircle
+  ShieldAlert,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -68,7 +69,7 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
 };
 
 const STORAGE_KEY = 'certipro_autosave_v1';
-const SETTINGS_PASSWORD = "3229";
+const SECURITY_STORAGE_KEY = 'certipro_allowed_ips_v1';
 
 // Helper to generate N empty rows
 const generateEmptyRows = (count: number): BudgetItem[] => {
@@ -587,8 +588,7 @@ const App: React.FC = () => {
             return {
                 ...parsed,
                 checkedRowIds: new Set(Array.isArray(parsed.checkedRowIds) ? parsed.checkedRowIds : []),
-                isLoading: false,
-                authorizedIPs: parsed.authorizedIPs || []
+                isLoading: false
             };
         }
     } catch (e) {
@@ -600,41 +600,67 @@ const App: React.FC = () => {
         projectInfo: INITIAL_PROJECT_INFO,
         isLoading: false,
         checkedRowIds: new Set(),
-        loadedFileName: undefined,
-        authorizedIPs: []
+        loadedFileName: undefined
     };
   });
-  
-  // --- IP SECURITY STATE ---
-  const [currentIP, setCurrentIP] = useState<string>('');
-  const [ipLoading, setIpLoading] = useState(true);
-  const [showSettingsAuth, setShowSettingsAuth] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [authPassword, setAuthPassword] = useState('');
-  const [newIPInput, setNewIPInput] = useState('');
 
-  // Fetch Public IP on mount
+  // --- SECURITY STATE ---
+  const [currentIP, setCurrentIP] = useState<string>('');
+  const [allowedIPs, setAllowedIPs] = useState<string[]>(() => {
+      try {
+          const saved = localStorage.getItem(SECURITY_STORAGE_KEY);
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) { return []; }
+  });
+  const [showSettingsLogin, setShowSettingsLogin] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsPassword, setSettingsPassword] = useState('');
+  const [ipInput, setIpInput] = useState('');
+
+  // Fetch IP
   useEffect(() => {
-    const fetchIP = async () => {
-        try {
-            const res = await fetch('https://api.ipify.org?format=json');
-            const data = await res.json();
-            setCurrentIP(data.ip);
-        } catch (err) {
+    fetch('https://api.ipify.org?format=json')
+        .then(response => response.json())
+        .then(data => setCurrentIP(data.ip))
+        .catch(err => {
             console.error("Error fetching IP", err);
-        } finally {
-            setIpLoading(false);
-        }
-    };
-    fetchIP();
+            // Optional: Set a dummy IP or handle error state if needed
+        });
   }, []);
 
-  const isIPAuthorized = useMemo(() => {
-      if (ipLoading) return true; // Let it load
-      if (!state.authorizedIPs || state.authorizedIPs.length === 0) return true; // First time use
-      return state.authorizedIPs.includes(currentIP);
-  }, [currentIP, state.authorizedIPs, ipLoading]);
+  // Persist allowed IPs
+  useEffect(() => {
+    localStorage.setItem(SECURITY_STORAGE_KEY, JSON.stringify(allowedIPs));
+  }, [allowedIPs]);
 
+  const isAccessAllowed = useMemo(() => {
+    if (!currentIP) return false; // Loading IP or error
+    if (allowedIPs.length === 0) return false; // No allowed IPs configured, block all
+    return allowedIPs.includes(currentIP);
+  }, [currentIP, allowedIPs]);
+
+  const handleSettingsLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (settingsPassword === '3229') {
+        setShowSettingsLogin(false);
+        setSettingsPassword('');
+        setShowSettingsModal(true);
+    } else {
+        alert("Contraseña incorrecta");
+    }
+  };
+
+  const handleAddIP = () => {
+      if (ipInput && !allowedIPs.includes(ipInput)) {
+          setAllowedIPs(prev => [...prev, ipInput.trim()]);
+          setIpInput('');
+      }
+  };
+
+  const handleRemoveIP = (ip: string) => {
+      setAllowedIPs(prev => prev.filter(item => item !== ip));
+  };
+  
   const [searchTerm, setSearchTerm] = useState('');
   useEffect(() => {
      if (!state) return;
@@ -696,6 +722,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+        if (!isAccessAllowed) return; // Disable shortcuts if blocked
+
         if (e.key === 'Escape') {
             setSelectedCellIndices(new Set());
             selectedCellIndicesRef.current = new Set();
@@ -714,7 +742,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, state]);
+  }, [history, state, isAccessAllowed]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -867,8 +895,7 @@ const App: React.FC = () => {
           items: state.items,
           masterItems: state.masterItems,
           checkedRowIds: Array.from(state.checkedRowIds || []),
-          loadedFileName: state.loadedFileName,
-          authorizedIPs: state.authorizedIPs
+          loadedFileName: state.loadedFileName
       };
       const jsonString = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
@@ -925,8 +952,7 @@ const App: React.FC = () => {
                       : (Array.isArray(data.masterItems) ? data.masterItems : []), 
                   isLoading: false,
                   checkedRowIds: new Set(Array.isArray(data.checkedRowIds) ? data.checkedRowIds : []),
-                  loadedFileName: hasLocalMasterItems ? state.loadedFileName : data.loadedFileName,
-                  authorizedIPs: data.authorizedIPs || state.authorizedIPs || []
+                  loadedFileName: hasLocalMasterItems ? state.loadedFileName : data.loadedFileName
               });
           } catch (error) {
               console.error(error);
@@ -1491,168 +1517,6 @@ const App: React.FC = () => {
       return sum;
   }, [selectedCellIndices, filteredItems, state.projectInfo.isAveria]);
 
-  const handleSettingsAuth = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (authPassword === SETTINGS_PASSWORD) {
-          setShowSettingsAuth(false);
-          setShowSettingsModal(true);
-          setAuthPassword('');
-      } else {
-          alert("Contraseña incorrecta");
-      }
-  };
-
-  const addAuthorizedIP = () => {
-      if (!newIPInput || state.authorizedIPs?.includes(newIPInput)) return;
-      setState(prev => ({
-          ...prev,
-          authorizedIPs: [...(prev.authorizedIPs || []), newIPInput]
-      }));
-      setNewIPInput('');
-  };
-
-  const removeAuthorizedIP = (ip: string) => {
-      setState(prev => ({
-          ...prev,
-          authorizedIPs: prev.authorizedIPs?.filter(i => i !== ip) || []
-      }));
-  };
-
-  if (!isIPAuthorized && !ipLoading) {
-      return (
-          <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6">
-              <div className="bg-slate-800 p-10 rounded-3xl shadow-2xl border border-slate-700 max-w-md w-full text-center animate-in zoom-in duration-300">
-                  <div className="bg-red-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-red-500/20">
-                    <ShieldAlert className="w-10 h-10 text-red-500" />
-                  </div>
-                  <h1 className="text-3xl font-black mb-4 tracking-tight">Acceso Restringido</h1>
-                  <p className="text-slate-400 mb-8 leading-relaxed">
-                      Esta aplicación solo puede ser utilizada desde conexiones autorizadas. Tu dirección IP actual no figura en nuestra lista blanca.
-                  </p>
-                  
-                  <div className="bg-slate-950/50 p-4 rounded-2xl mb-8 border border-slate-700/50">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tu IP Pública</p>
-                      <p className="text-xl font-mono font-bold text-indigo-400">{currentIP || 'Detectando...'}</p>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <button 
-                        onClick={() => setShowSettingsAuth(true)}
-                        className="bg-white text-slate-900 font-black py-4 rounded-2xl hover:bg-slate-200 transition-all flex items-center justify-center gap-3"
-                    >
-                        <Lock className="w-5 h-5" /> PANEL DE CONTROL
-                    </button>
-                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Requiere autorización de administrador</p>
-                  </div>
-              </div>
-
-              {/* AUTH MODAL FROM BLOCKED SCREEN */}
-              {showSettingsAuth && (
-                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-200">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="bg-indigo-100 p-2 rounded-xl">
-                                <Settings className="w-6 h-6 text-indigo-600" />
-                            </div>
-                            <h2 className="text-xl font-bold text-slate-900">Configuración</h2>
-                        </div>
-                        <form onSubmit={handleSettingsAuth}>
-                            <p className="text-sm text-slate-500 mb-4 font-medium">Introduzca la contraseña de administrador:</p>
-                            <input 
-                                type="password" 
-                                autoFocus
-                                className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl mb-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl tracking-widest font-bold"
-                                value={authPassword}
-                                onChange={(e) => setAuthPassword(e.target.value)}
-                            />
-                            <div className="flex gap-3">
-                                <button type="button" onClick={() => setShowSettingsAuth(false)} className="flex-1 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
-                                <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-200">Entrar</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-              )}
-
-              {/* SETTINGS MODAL FROM BLOCKED SCREEN */}
-              {showSettingsModal && (
-                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200">
-                        <div className="bg-slate-50 p-6 border-b border-slate-200 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <Globe className="w-6 h-6 text-indigo-600" />
-                                <h2 className="text-xl font-bold text-slate-900">Control de Accesos IP</h2>
-                            </div>
-                            <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
-                        </div>
-                        <div className="p-8">
-                            <div className="bg-indigo-50 p-4 rounded-2xl mb-8 border border-indigo-100 flex items-center justify-between">
-                                <div>
-                                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Tu IP actual detectada</p>
-                                    <p className="text-lg font-mono font-bold text-indigo-900">{currentIP}</p>
-                                </div>
-                                <button 
-                                    onClick={() => {
-                                        if (currentIP && !state.authorizedIPs?.includes(currentIP)) {
-                                            setState(prev => ({ ...prev, authorizedIPs: [...(prev.authorizedIPs || []), currentIP] }));
-                                        }
-                                    }}
-                                    className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-md"
-                                >
-                                    Autorizar mi IP
-                                </button>
-                            </div>
-
-                            <div className="mb-6">
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Añadir IP Manualmente</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Ej: 192.168.1.1"
-                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                                        value={newIPInput}
-                                        onChange={(e) => setNewIPInput(e.target.value)}
-                                    />
-                                    <button 
-                                        onClick={addAuthorizedIP}
-                                        className="bg-slate-900 text-white p-3 rounded-xl hover:bg-slate-800"
-                                    >
-                                        <PlusCircle className="w-6 h-6" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Lista de IPs Autorizadas</label>
-                                {state.authorizedIPs?.length === 0 ? (
-                                    <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">No hay IPs restringidas. La aplicación es pública.</p>
-                                ) : (
-                                    state.authorizedIPs?.map(ip => (
-                                        <div key={ip} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all">
-                                            <span className="font-mono font-bold text-slate-700">{ip}</span>
-                                            <button onClick={() => removeAuthorizedIP(ip)} className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                        <div className="bg-slate-50 p-6 flex justify-end">
-                            <button 
-                                onClick={() => setShowSettingsModal(false)}
-                                className="px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl text-sm"
-                            >
-                                Finalizar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-              )}
-          </div>
-      );
-  }
-
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
 
   const totalAmount = state.items.reduce((acc, curr) => {
@@ -1736,23 +1600,15 @@ const App: React.FC = () => {
                  <div><h1 className="text-xl font-bold text-slate-900 leading-tight">TENSA SA</h1></div>
              </div>
              <div className="flex items-center gap-2">
-                 {/* SETTINGS BUTTON */}
-                 <button 
-                    onClick={() => setShowSettingsAuth(true)}
-                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded hover:bg-slate-200 transition-all mr-2"
-                    title="Ajustes de Seguridad"
-                 >
-                     <Settings className="w-4 h-4" />
-                 </button>
-
                  <div className="flex items-center gap-2 mr-4 border-r border-slate-200 pr-4">
-                     <button onClick={undo} onMouseDown={(e) => e.preventDefault()} disabled={history.past.length === 0 && (!historySnapshot.current || historySnapshot.current === state)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Deshacer (Ctrl+Z)"><Undo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Deshacer</span></button>
-                     <button onClick={redo} onMouseDown={(e) => e.preventDefault()} disabled={history.future.length === 0} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Rehacer (Ctrl+Y)"><Redo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Rehacer</span></button>
+                     <button onClick={undo} onMouseDown={(e) => e.preventDefault()} disabled={!isAccessAllowed || (history.past.length === 0 && (!historySnapshot.current || historySnapshot.current === state))} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Deshacer (Ctrl+Z)"><Undo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Deshacer</span></button>
+                     <button onClick={redo} onMouseDown={(e) => e.preventDefault()} disabled={!isAccessAllowed || history.future.length === 0} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Rehacer (Ctrl+Y)"><Redo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Rehacer</span></button>
                  </div>
-                 <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium transition-colors select-none" title="Cargar proyecto guardado (.json)"><FolderOpen className="w-4 h-4 text-orange-500" />Cargar Trabajo<input type="file" className="hidden" accept=".json" onChange={handleLoadProject} onClick={(e) => (e.currentTarget.value = '')} /></label>
-                 <button onClick={handleSaveProject} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium transition-colors" title="Guardar proyecto actual (.json)"><Save className="w-4 h-4 text-blue-500" />Guardar Trabajo</button>
-                 <div className={`flex items-center rounded border ml-4 transition-colors ${state.masterItems.length > 0 ? "bg-emerald-100 border-emerald-300 text-emerald-800 shadow-sm" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"}`}>
-                     <label className="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm font-medium grow select-none hover:bg-opacity-80 rounded-l" title={state.masterItems.length > 0 ? "Tabla de recursos cargada" : "Importar tabla de recursos desde Excel"}><Upload className={`w-4 h-4 ${state.masterItems.length > 0 ? "text-emerald-700" : "text-slate-500"}`} />{state.masterItems.length > 0 ? "Tabla Rec. (OK)" : "Importar Tabla Rec."}<input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} onClick={(e) => (e.currentTarget.value = '')} /></label>
+                 <button onClick={() => setShowSettingsLogin(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white border border-slate-700 rounded hover:bg-slate-700 cursor-pointer text-sm font-medium transition-colors shadow-sm ml-2" title="Ajustes de Seguridad"><Settings className="w-4 h-4" />Ajustes</button>
+                 <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium transition-colors select-none ${!isAccessAllowed && "opacity-50 pointer-events-none"}`} title="Cargar proyecto guardado (.json)"><FolderOpen className="w-4 h-4 text-orange-500" />Cargar Trabajo<input type="file" className="hidden" accept=".json" onChange={handleLoadProject} onClick={(e) => (e.currentTarget.value = '')} disabled={!isAccessAllowed} /></label>
+                 <button onClick={handleSaveProject} className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium transition-colors ${!isAccessAllowed && "opacity-50 pointer-events-none"}`} title="Guardar proyecto actual (.json)" disabled={!isAccessAllowed}><Save className="w-4 h-4 text-blue-500" />Guardar Trabajo</button>
+                 <div className={`flex items-center rounded border ml-4 transition-colors ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""} ${state.masterItems.length > 0 ? "bg-emerald-100 border-emerald-300 text-emerald-800 shadow-sm" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"}`}>
+                     <label className="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm font-medium grow select-none hover:bg-opacity-80 rounded-l" title={state.masterItems.length > 0 ? "Tabla de recursos cargada" : "Importar tabla de recursos desde Excel"}><Upload className={`w-4 h-4 ${state.masterItems.length > 0 ? "text-emerald-700" : "text-slate-500"}`} />{state.masterItems.length > 0 ? "Tabla Rec. (OK)" : "Importar Tabla Rec."}<input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} onClick={(e) => (e.currentTarget.value = '')} disabled={!isAccessAllowed}/></label>
                      {state.masterItems.length > 0 && (
                         <button className="px-2 py-2 border-l border-emerald-200 hover:bg-emerald-200 text-emerald-700 rounded-r focus:outline-none relative group cursor-help" onClick={(e) => { e.preventDefault(); alert(`Archivo: ${state.loadedFileName || 'Desconocido'}`); }} aria-label="Información"><Info className="w-4 h-4" />
                             <div className="absolute right-0 top-full mt-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-top scale-95 group-hover:scale-100 text-left">
@@ -1763,9 +1619,9 @@ const App: React.FC = () => {
                         </button>
                      )}
                  </div>
-                 <button onClick={handleClearAll} disabled={state.items.length === 0 && !state.projectInfo.isAveria && !state.projectInfo.name && !state.projectInfo.projectNumber && !state.projectInfo.orderNumber && !state.projectInfo.client} className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors ml-2" title="Limpiar todo"><Eraser className="w-4 h-4" />Limpiar</button>
-                 <div className="relative" ref={exportBtnRef}>
-                    <button className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors" onClick={() => setShowExportMenu(!showExportMenu)}><Download className="w-4 h-4" />Exportar<ChevronDown className="w-3 h-3 opacity-70" /></button>
+                 <button onClick={handleClearAll} disabled={(!isAccessAllowed) || (state.items.length === 0 && !state.projectInfo.isAveria && !state.projectInfo.name && !state.projectInfo.projectNumber && !state.projectInfo.orderNumber && !state.projectInfo.client)} className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors ml-2" title="Limpiar todo"><Eraser className="w-4 h-4" />Limpiar</button>
+                 <div className={`relative ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""}`} ref={exportBtnRef}>
+                    <button className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors" onClick={() => setShowExportMenu(!showExportMenu)} disabled={!isAccessAllowed}><Download className="w-4 h-4" />Exportar<ChevronDown className="w-3 h-3 opacity-70" /></button>
                     {showExportMenu && (
                         <div className="absolute right-0 mt-1 w-64 bg-white border border-slate-200 shadow-xl rounded-md py-1 z-50 animate-in fade-in slide-in-from-top-2">
                              <button onClick={exportToExcel} className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm text-slate-700 flex items-center gap-2"><FileSpreadsheet className="w-4 h-4 text-green-600" /> Excel (.xlsx)</button>
@@ -1776,268 +1632,284 @@ const App: React.FC = () => {
                         </div>
                     )}
                  </div>
-                 <button onClick={() => setShowCalculator(!showCalculator)} className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ml-2 shadow-sm ${showCalculator ? "bg-slate-700 text-white border border-slate-600" : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"}`} title="Calculadora"><Calculator className="w-4 h-4" /></button>
-                 <button onClick={() => setShowHelpDialog(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded ml-2 transition-colors" title="Ayuda"><HelpCircle className="w-4 h-4 text-purple-500" /></button>
+                 <button onClick={() => setShowCalculator(!showCalculator)} className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ml-2 shadow-sm ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""} ${showCalculator ? "bg-slate-700 text-white border border-slate-600" : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"}`} title="Calculadora" disabled={!isAccessAllowed}><Calculator className="w-4 h-4" /></button>
+                 <button onClick={() => setShowHelpDialog(true)} className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded ml-2 transition-colors ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""}`} title="Ayuda" disabled={!isAccessAllowed}><HelpCircle className="w-4 h-4 text-purple-500" /></button>
              </div>
          </div>
-         <div className="px-6 py-4 bg-slate-50/50">
-             <div className="grid grid-cols-12 gap-x-6 gap-y-4">
-                 <div className="col-span-6"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Denominación</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-2xl font-bold text-slate-800 pb-1 focus:bg-white transition-colors placeholder-slate-300" value={state.projectInfo.name} onChange={(e) => updateProjectInfo('name', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
-                 <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Nº Obra</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.projectNumber} onChange={(e) => updateProjectInfo('projectNumber', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
-                 <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Nº Pedido</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.orderNumber} onChange={(e) => updateProjectInfo('orderNumber', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
-                 <div className="col-span-2 flex items-end"><label className="flex items-center gap-2 cursor-pointer select-none bg-red-50 px-3 py-2 rounded border border-red-100 hover:bg-red-100 transition-colors w-full"><input type="checkbox" className="w-5 h-5 rounded border-red-400 text-red-600 focus:ring-red-500" checked={state.projectInfo.isAveria || false} onChange={(e) => updateProjectInfo('isAveria', e.target.checked)} /><span className="font-bold text-red-700 uppercase">AVERÍA</span></label></div>
-                 <div className="col-span-8"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Cliente</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.client} onChange={(e) => updateProjectInfo('client', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
-                 <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Fecha</label><input type="date" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.date} onChange={(e) => updateProjectInfo('date', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
-                 <div className="col-span-2 text-right"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total Acumulado</label><div className="text-3xl font-sans font-bold text-emerald-700 leading-none pb-1 tabular-nums">{formatCurrency(totalAmount)}</div></div>
-                 {state.projectInfo.isAveria && (
-                   <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm"><div className="flex items-center gap-2 mb-3 text-red-800 font-bold uppercase text-sm border-b border-red-200 pb-1"><AlertTriangle className="w-4 h-4" /> Detalles de la Avería</div><div className="grid grid-cols-12 gap-6"><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><div className="relative"><Hash className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="text" autoFocus className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" placeholder="Axxxxx..." value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><div className="relative"><Calendar className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="date" className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><div className="flex items-center gap-1 mb-1"><label className="block text-xs font-bold text-red-600 uppercase">Horario</label><div className="group relative z-10"><Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors cursor-help" /><div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-bottom scale-95 group-hover:scale-100"><div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /><span className="font-bold text-slate-700 text-sm">Horarios y Coeficientes</span></div><div className="p-4 space-y-4"><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-orange-400 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Diurno</span><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-orange-200">K = 1,25</span></div><p className="text-xs text-slate-500 leading-relaxed">Lunes a Viernes laborables de <span className="font-semibold text-slate-700">07:00</span> a <span className="font-semibold text-slate-700">19:00h</span>.</p></div><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-indigo-500 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Nocturno / Finde</span><span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-indigo-200">K = 1,75</span></div><p className="text-xs text-slate-500 leading-relaxed">Resto de horas, fines de semana y festivos.</p></div></div><div className="absolute top-full left-1/2 -translate-x-1/2 -mt-2 w-4 h-4 bg-white border-r border-b border-slate-100 transform rotate-45 rounded-sm"></div></div></div></div><div className="relative"><Clock className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><select className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium appearance-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select><ChevronDown className="w-4 h-4 absolute right-2 top-2.5 text-red-300 pointer-events-none" /></div></div><div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><div className="relative"><AlignLeft className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><textarea rows={2} className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div></div></div>
-                 )}
+         {isAccessAllowed && (
+             <div className="px-6 py-4 bg-slate-50/50">
+                 <div className="grid grid-cols-12 gap-x-6 gap-y-4">
+                     <div className="col-span-6"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Denominación</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-2xl font-bold text-slate-800 pb-1 focus:bg-white transition-colors placeholder-slate-300" value={state.projectInfo.name} onChange={(e) => updateProjectInfo('name', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
+                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Nº Obra</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.projectNumber} onChange={(e) => updateProjectInfo('projectNumber', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
+                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Nº Pedido</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.orderNumber} onChange={(e) => updateProjectInfo('orderNumber', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
+                     <div className="col-span-2 flex items-end"><label className="flex items-center gap-2 cursor-pointer select-none bg-red-50 px-3 py-2 rounded border border-red-100 hover:bg-red-100 transition-colors w-full"><input type="checkbox" className="w-5 h-5 rounded border-red-400 text-red-600 focus:ring-red-500" checked={state.projectInfo.isAveria || false} onChange={(e) => updateProjectInfo('isAveria', e.target.checked)} /><span className="font-bold text-red-700 uppercase">AVERÍA</span></label></div>
+                     <div className="col-span-8"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Cliente</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.client} onChange={(e) => updateProjectInfo('client', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
+                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Fecha</label><input type="date" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 focus:bg-white transition-colors" value={state.projectInfo.date} onChange={(e) => updateProjectInfo('date', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} /></div>
+                     <div className="col-span-2 text-right"><label className="block text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total Acumulado</label><div className="text-3xl font-sans font-bold text-emerald-700 leading-none pb-1 tabular-nums">{formatCurrency(totalAmount)}</div></div>
+                     {state.projectInfo.isAveria && (
+                       <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm"><div className="flex items-center gap-2 mb-3 text-red-800 font-bold uppercase text-sm border-b border-red-200 pb-1"><AlertTriangle className="w-4 h-4" /> Detalles de la Avería</div><div className="grid grid-cols-12 gap-6"><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><div className="relative"><Hash className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="text" autoFocus className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" placeholder="Axxxxx..." value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><div className="relative"><Calendar className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><input type="date" className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div><div className="col-span-2"><div className="flex items-center gap-1 mb-1"><label className="block text-xs font-bold text-red-600 uppercase">Horario</label><div className="group relative z-10"><Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors cursor-help" /><div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-72 bg-white p-0 rounded-lg shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-[100] border border-slate-100 ring-1 ring-slate-900/5 transform origin-bottom scale-95 group-hover:scale-100"><div className="bg-slate-50 px-4 py-3 rounded-t-lg border-b border-slate-100 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /><span className="font-bold text-slate-700 text-sm">Horarios y Coeficientes</span></div><div className="p-4 space-y-4"><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-orange-400 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Diurno</span><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-orange-200">K = 1,25</span></div><p className="text-xs text-slate-500 leading-relaxed">Lunes a Viernes laborables de <span className="font-semibold text-slate-700">07:00</span> a <span className="font-semibold text-slate-700">19:00h</span>.</p></div><div className="relative pl-3"><div className="absolute left-0 top-1.5 w-1 h-8 bg-indigo-500 rounded-full"></div><div className="flex justify-between items-baseline mb-1"><span className="font-bold text-slate-800 text-xs uppercase tracking-wide">Nocturno / Finde</span><span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-indigo-200">K = 1,75</span></div><p className="text-xs text-slate-500 leading-relaxed">Resto de horas, fines de semana y festivos.</p></div></div><div className="absolute top-full left-1/2 -translate-x-1/2 -mt-2 w-4 h-4 bg-white border-r border-b border-slate-100 transform rotate-45 rounded-sm"></div></div></div></div><div className="relative"><Clock className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><select className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium appearance-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select><ChevronDown className="w-4 h-4 absolute right-2 top-2.5 text-red-300 pointer-events-none" /></div></div><div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><div className="relative"><AlignLeft className="w-4 h-4 absolute left-2 top-2.5 text-red-300" /><textarea rows={2} className="w-full pl-8 pr-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent font-medium resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} onBlur={handleInputBlur} onFocus={handleInputBlur} /></div></div></div></div>
+                     )}
+                 </div>
              </div>
-         </div>
+         )}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <div className="flex flex-col h-full bg-white relative">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-12 shrink-0">
-             <div className="relative group"><Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" /><input type="text" className="pl-9 pr-8 py-1.5 bg-white border border-slate-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all shadow-sm" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />{searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full p-0.5"><X className="w-3 h-3" /></button>}</div>
-             <div className="text-sm text-slate-500 font-medium">{searchTerm ? <span>Resultados: <span className="text-slate-900 font-bold">{filteredItems.length}</span></span> : !selectedRowId && <span className="text-slate-400 italic font-normal hidden md:inline">Seleccione una fila para editar</span>}</div>
-          </div>
-          <div ref={tableContainerRef} className="flex-1 overflow-auto relative bg-slate-100/50">
-            <table className="w-full border-collapse text-base table-fixed min-w-[1050px] bg-white select-none">
-              <thead className="sticky top-0 z-10 bg-orange-100 text-orange-900 font-semibold border-b border-orange-200 shadow-sm"><tr className="text-base uppercase tracking-wider"><th className="w-12 text-center py-4 border-r border-orange-200 bg-orange-200 text-xs font-bold select-none text-orange-800">CCAA</th><th className="w-10 text-center py-4 border-r border-orange-200 bg-orange-200 text-sm select-none">#</th><th className="w-64 px-4 py-4 text-center border-r border-orange-200 font-bold">RECURSO</th><th className="w-[450px] px-4 py-4 text-center border-r border-orange-200 font-bold">DESCRIPCIÓN</th><th className="w-24 px-4 py-4 text-center border-r border-orange-200 bg-orange-50 text-orange-800 font-bold">UD</th>{state.projectInfo.isAveria && <th className="w-20 px-4 py-4 text-center border-r border-orange-200 bg-red-100 text-red-800 font-bold">K</th>}<th className="w-24 px-4 py-4 text-center border-r border-orange-200 font-bold">PRECIO</th><th className="w-28 px-4 py-4 text-center font-bold">TOTAL</th><th className="w-64 px-4 py-4 text-center border-r border-orange-200 border-l border-orange-200 bg-orange-50/50 font-bold">OBSERVACIONES</th><th className="w-24 px-3 py-4 text-center border-l border-orange-200 bg-orange-200 font-bold">ACCIONES</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{filteredItems.map((item, index) => (<BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria} searchTerm={searchTerm} activeSearch={activeSearch} editingCell={editingCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />))}</tbody>
-            </table>
-          </div>
-          {showProformaDialog && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"><div className="bg-white rounded-xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-sm overflow-hidden border border-slate-100"><div className="bg-slate-50/80 px-5 py-4 border-b border-slate-100 flex items-center justify-between"><div className="flex items-center gap-2.5"><div className="bg-blue-100 p-1.5 rounded-md"><CheckSquare className="w-4 h-4 text-blue-600"/></div><span className="font-bold text-slate-700 text-sm tracking-tight">Generar Factura Proforma</span></div><button onClick={() => setShowProformaDialog(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-1 rounded-full"><X className="w-4 h-4"/></button></div><div className="p-6"><div className="relative pl-4 mb-6"><div className="absolute left-0 top-1 w-1 h-full max-h-[40px] bg-blue-500 rounded-full opacity-20"></div><p className="text-sm text-slate-600 font-medium">Margen de Beneficio</p><p className="text-xs text-slate-400 mt-1">Indique el porcentaje a descontar.</p></div><div className="mb-8"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Percent className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500" /></div><input ref={marginInputRef} type="number" className="block w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-lg text-slate-700 text-xl font-bold placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" placeholder="0" value={proformaMargin} onChange={(e) => setProformaMargin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmProformaExport()} /><div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><span className="text-slate-400 font-bold text-sm">%</span></div></div></div><div className="flex gap-3"><button onClick={() => setShowProformaDialog(false)} className="flex-1 px-4 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all">Cancelar</button><button onClick={confirmProformaExport} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"><FileText className="w-4 h-4" />Generar PDF</button></div></div></div></div>
-          )}
-          {showClearDialog && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in"><div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden border-t-4 border-red-500"><div className="p-6"><div className="flex items-center gap-3 text-red-600 mb-4"><div className="p-3 bg-red-100 rounded-full"><AlertTriangle className="w-8 h-8" /></div><h3 className="text-xl font-bold text-slate-900">¿Borrar todo?</h3></div><p className="text-slate-600 mb-6">Se borrarán todos los datos. Esta acción dejará la hoja completamente limpia.</p><div className="flex gap-3 justify-end"><button onClick={() => setShowClearDialog(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded">Cancelar</button><button onClick={confirmClearAll} className="px-5 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" />Sí, borrar todo</button></div></div></div></div>
-          )}
-        {showHelpDialog && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-              <div className="bg-white rounded-3xl shadow-[0_32px_128px_-16px_rgba(0,0,0,0.4)] w-full max-w-4xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh] transform transition-all scale-100">
-                
-                {/* Modern Light Header */}
-                <div className="bg-slate-50 px-8 py-7 flex items-center justify-between border-b border-slate-200 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl -ml-16 -mb-16"></div>
-                  
-                  <div className="flex items-center gap-4 relative z-10">
-                    <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-purple-500/20">
-                      <HelpCircle className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">Guía de Uso CertiTensa</h2>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowHelpDialog(false)}
-                    className="text-slate-400 hover:text-slate-900 p-2 rounded-xl hover:bg-slate-200 transition-all duration-200 relative z-10"
-                  >
-                    <X className="w-7 h-7" />
-                  </button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/50">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group flex flex-col h-full">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                          <Database className="w-6 h-6" />
-                        </div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">1. Carga de Datos</h3>
-                      </div>
-                      <p className="text-slate-600 leading-relaxed text-sm grow">
-                        Antes de iniciar cualquier certificación, cargue el <strong>Excel de recursos de Iberdrola</strong>. Esto permite al sistema realizar búsquedas automáticas y autocompletar partidas de forma precisa.
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all group flex flex-col h-full">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                          <FileOutput className="w-6 h-6" />
-                        </div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">2. Exportación y Proformas</h3>
-                      </div>
-                      <p className="text-slate-600 leading-relaxed text-sm grow">
-                        Exporte a <strong>PDF o EXCEL</strong> desde el menú superior. Para generar <strong>Facturas Proforma</strong>, marque las casillas en la columna <strong>CCAA</strong> e indique el margen de beneficio solicitado antes de emitir.
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300 transition-all group flex flex-col h-full">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                          <Move className="w-6 h-6" />
-                        </div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">3. Organización de Filas</h3>
-                      </div>
-                      <p className="text-slate-600 leading-relaxed text-sm grow">
-                        Personalice el orden de las partidas pulsando sobre el <strong>número de fila (#)</strong> y arrastrándola a la posición deseada. La numeración se actualizará de forma correlativa automáticamente.
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-red-300 transition-all group flex flex-col h-full">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-red-50 text-red-600 p-2.5 rounded-xl group-hover:bg-red-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                          <AlertTriangle className="w-6 h-6" />
-                        </div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">4. Módulo de Averías</h3>
-                      </div>
-                      <p className="text-slate-600 leading-relaxed text-sm grow">
-                        Active el modo <strong>Avería</strong> para habilitar campos especiales (Nº avería, horarios y descripción). Se añadirá una columna para el coeficiente <strong>K</strong>, que ajustará el importe total de forma automática.
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all group flex flex-col h-full md:col-span-2">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                          <HardDrive className="w-6 h-6" />
-                        </div>
-                        <h3 className="font-extrabold text-slate-800 text-lg">5. Persistencia de Datos (.JSON)</h3>
-                      </div>
-                      <p className="text-slate-600 leading-relaxed text-sm grow">
-                        Utilice los botones <strong>Guardar Trabajo</strong> y <strong>Cargar Trabajo</strong> para descargar su progreso en un archivo .JSON. Esto le permite pausar su labor y retomarla cualquier día desde donde la dejó.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-8 border-t border-slate-100 flex justify-end gap-4 items-center">
-                  <button 
-                    onClick={() => setShowHelpDialog(false)}
-                    className="px-10 py-3.5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 shadow-2xl shadow-slate-900/20 active:transform active:scale-95 transition-all flex items-center gap-3 text-sm"
-                  >
-                    COMPRENDIDO <Check className="w-5 h-5" />
-                  </button>
-                </div>
-
+        {isAccessAllowed ? (
+            <div className="flex flex-col h-full bg-white relative">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-12 shrink-0">
+                 <div className="relative group"><Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" /><input type="text" className="pl-9 pr-8 py-1.5 bg-white border border-slate-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all shadow-sm" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />{searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full p-0.5"><X className="w-3 h-3" /></button>}</div>
+                 <div className="text-sm text-slate-500 font-medium">{searchTerm ? <span>Resultados: <span className="text-slate-900 font-bold">{filteredItems.length}</span></span> : !selectedRowId && <span className="text-slate-400 italic font-normal hidden md:inline">Seleccione una fila para editar</span>}</div>
               </div>
-            </div>
-        )}
-
-        {/* SETTINGS AUTH MODAL (IN-APP) */}
-        {showSettingsAuth && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-200">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="bg-indigo-100 p-2 rounded-xl">
-                            <Settings className="w-6 h-6 text-indigo-600" />
+              <div ref={tableContainerRef} className="flex-1 overflow-auto relative bg-slate-100/50">
+                <table className="w-full border-collapse text-base table-fixed min-w-[1050px] bg-white select-none">
+                  <thead className="sticky top-0 z-10 bg-orange-100 text-orange-900 font-semibold border-b border-orange-200 shadow-sm"><tr className="text-base uppercase tracking-wider"><th className="w-12 text-center py-4 border-r border-orange-200 bg-orange-200 text-xs font-bold select-none text-orange-800">CCAA</th><th className="w-10 text-center py-4 border-r border-orange-200 bg-orange-200 text-sm select-none">#</th><th className="w-64 px-4 py-4 text-center border-r border-orange-200 font-bold">RECURSO</th><th className="w-[450px] px-4 py-4 text-center border-r border-orange-200 font-bold">DESCRIPCIÓN</th><th className="w-24 px-4 py-4 text-center border-r border-orange-200 bg-orange-50 text-orange-800 font-bold">UD</th>{state.projectInfo.isAveria && <th className="w-20 px-4 py-4 text-center border-r border-orange-200 bg-red-100 text-red-800 font-bold">K</th>}<th className="w-24 px-4 py-4 text-center border-r border-orange-200 font-bold">PRECIO</th><th className="w-28 px-4 py-4 text-center font-bold">TOTAL</th><th className="w-64 px-4 py-4 text-center border-r border-orange-200 border-l border-orange-200 bg-orange-50/50 font-bold">OBSERVACIONES</th><th className="w-24 px-3 py-4 text-center border-l border-orange-200 bg-orange-200 font-bold">ACCIONES</th></tr></thead>
+                  <tbody className="divide-y divide-slate-200">{filteredItems.map((item, index) => (<BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria} searchTerm={searchTerm} activeSearch={activeSearch} editingCell={editingCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />))}</tbody>
+                </table>
+              </div>
+              {showProformaDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"><div className="bg-white rounded-xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-sm overflow-hidden border border-slate-100"><div className="bg-slate-50/80 px-5 py-4 border-b border-slate-100 flex items-center justify-between"><div className="flex items-center gap-2.5"><div className="bg-blue-100 p-1.5 rounded-md"><CheckSquare className="w-4 h-4 text-blue-600"/></div><span className="font-bold text-slate-700 text-sm tracking-tight">Generar Factura Proforma</span></div><button onClick={() => setShowProformaDialog(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-1 rounded-full"><X className="w-4 h-4"/></button></div><div className="p-6"><div className="relative pl-4 mb-6"><div className="absolute left-0 top-1 w-1 h-full max-h-[40px] bg-blue-500 rounded-full opacity-20"></div><p className="text-sm text-slate-600 font-medium">Margen de Beneficio</p><p className="text-xs text-slate-400 mt-1">Indique el porcentaje a descontar.</p></div><div className="mb-8"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Percent className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500" /></div><input ref={marginInputRef} type="number" className="block w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-lg text-slate-700 text-xl font-bold placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" placeholder="0" value={proformaMargin} onChange={(e) => setProformaMargin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmProformaExport()} /><div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><span className="text-slate-400 font-bold text-sm">%</span></div></div></div><div className="flex gap-3"><button onClick={() => setShowProformaDialog(false)} className="flex-1 px-4 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-all">Cancelar</button><button onClick={confirmProformaExport} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"><FileText className="w-4 h-4" />Generar PDF</button></div></div></div></div>
+              )}
+              {showClearDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in"><div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden border-t-4 border-red-500"><div className="p-6"><div className="flex items-center gap-3 text-red-600 mb-4"><div className="p-3 bg-red-100 rounded-full"><AlertTriangle className="w-8 h-8" /></div><h3 className="text-xl font-bold text-slate-900">¿Borrar todo?</h3></div><p className="text-slate-600 mb-6">Se borrarán todos los datos. Esta acción dejará la hoja completamente limpia.</p><div className="flex gap-3 justify-end"><button onClick={() => setShowClearDialog(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded">Cancelar</button><button onClick={confirmClearAll} className="px-5 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" />Sí, borrar todo</button></div></div></div></div>
+              )}
+            {showHelpDialog && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                  <div className="bg-white rounded-3xl shadow-[0_32px_128px_-16px_rgba(0,0,0,0.4)] w-full max-w-4xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh] transform transition-all scale-100">
+                    
+                    {/* Modern Light Header */}
+                    <div className="bg-slate-50 px-8 py-7 flex items-center justify-between border-b border-slate-200 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                      <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl -ml-16 -mb-16"></div>
+                      
+                      <div className="flex items-center gap-4 relative z-10">
+                        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-purple-500/20">
+                          <HelpCircle className="w-7 h-7" />
                         </div>
-                        <h2 className="text-xl font-bold text-slate-900">Ajustes de Seguridad</h2>
+                        <div>
+                          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Guía de Uso CertiTensa</h2>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShowHelpDialog(false)}
+                        className="text-slate-400 hover:text-slate-900 p-2 rounded-xl hover:bg-slate-200 transition-all duration-200 relative z-10"
+                      >
+                        <X className="w-7 h-7" />
+                      </button>
                     </div>
-                    <form onSubmit={handleSettingsAuth}>
-                        <p className="text-sm text-slate-500 mb-4 font-medium">Introduzca la contraseña para acceder:</p>
-                        <input 
-                            type="password" 
-                            autoFocus
-                            className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl mb-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl tracking-widest font-bold"
-                            value={authPassword}
-                            onChange={(e) => setAuthPassword(e.target.value)}
-                        />
-                        <div className="flex gap-3">
-                            <button type="button" onClick={() => setShowSettingsAuth(false)} className="flex-1 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
-                            <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-200">Acceder</button>
+                    
+                    <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/50">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group flex flex-col h-full">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm">
+                              <Database className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-extrabold text-slate-800 text-lg">1. Carga de Datos</h3>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-sm grow">
+                            Antes de iniciar cualquier certificación, cargue el <strong>Excel de recursos de Iberdrola</strong>. Esto permite al sistema realizar búsquedas automáticas y autocompletar partidas de forma precisa.
+                          </p>
                         </div>
-                    </form>
+
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all group flex flex-col h-full">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300 shadow-sm">
+                              <FileOutput className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-extrabold text-slate-800 text-lg">2. Exportación y Proformas</h3>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-sm grow">
+                            Exporte a <strong>PDF o EXCEL</strong> desde el menú superior. Para generar <strong>Facturas Proforma</strong>, marque las casillas en la columna <strong>CCAA</strong> e indique el margen de beneficio solicitado antes de emitir.
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300 transition-all group flex flex-col h-full">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-all duration-300 shadow-sm">
+                              <Move className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-extrabold text-slate-800 text-lg">3. Organización de Filas</h3>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-sm grow">
+                            Personalice el orden de las partidas pulsando sobre el <strong>número de fila (#)</strong> y arrastrándola a la posición deseada. La numeración se actualizará de forma correlativa automáticamente.
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-red-300 transition-all group flex flex-col h-full">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-red-50 text-red-600 p-2.5 rounded-xl group-hover:bg-red-600 group-hover:text-white transition-all duration-300 shadow-sm">
+                              <AlertTriangle className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-extrabold text-slate-800 text-lg">4. Módulo de Averías</h3>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-sm grow">
+                            Active el modo <strong>Avería</strong> para habilitar campos especiales (Nº avería, horarios y descripción). Se añadirá una columna para el coeficiente <strong>K</strong>, que ajustará el importe total de forma automática.
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all group flex flex-col h-full md:col-span-2">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-all duration-300 shadow-sm">
+                              <HardDrive className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-extrabold text-slate-800 text-lg">5. Persistencia de Datos (.JSON)</h3>
+                          </div>
+                          <p className="text-slate-600 leading-relaxed text-sm grow">
+                            Utilice los botones <strong>Guardar Trabajo</strong> y <strong>Cargar Trabajo</strong> para descargar su progreso en un archivo .JSON. Esto le permite pausar su labor y retomarla cualquier día desde donde la dejó.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-8 border-t border-slate-100 flex justify-end gap-4 items-center">
+                      <button 
+                        onClick={() => setShowHelpDialog(false)}
+                        className="px-10 py-3.5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 shadow-2xl shadow-slate-900/20 active:transform active:scale-95 transition-all flex items-center gap-3 text-sm"
+                      >
+                        COMPRENDIDO <Check className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+            )}
+            {showCalculator && <DraggableCalculator onClose={() => setShowCalculator(false)} />}
+            </div>
+        ) : (
+            <div className="flex flex-col items-center justify-center h-full bg-slate-100 text-center p-8">
+                <div className="bg-white p-12 rounded-2xl shadow-xl border border-red-100 max-w-lg w-full">
+                    <div className="mx-auto w-24 h-24 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6">
+                        <ShieldAlert className="w-12 h-12" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-slate-900 mb-4">Acceso Denegado</h2>
+                    <p className="text-slate-600 mb-8 leading-relaxed">
+                        Esta aplicación está protegida. Su dirección IP pública no está autorizada para acceder al contenido.
+                    </p>
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-8 flex items-center justify-center gap-3">
+                        <Globe className="w-5 h-5 text-slate-400" />
+                        <span className="font-mono text-lg font-bold text-slate-700">{currentIP || "Detectando IP..."}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 uppercase tracking-wide font-bold">Contacte con el administrador o acceda a Ajustes</p>
                 </div>
             </div>
         )}
-
-        {/* SETTINGS MODAL (IN-APP) */}
-        {showSettingsModal && (
-            <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200">
-                    <div className="bg-slate-50 p-6 border-b border-slate-200 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <Globe className="w-6 h-6 text-indigo-600" />
-                            <h2 className="text-xl font-bold text-slate-900">Control de Accesos IP</h2>
-                        </div>
-                        <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
-                    </div>
-                    <div className="p-8">
-                        <div className="bg-indigo-50 p-4 rounded-2xl mb-8 border border-indigo-100 flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Tu IP actual detectada</p>
-                                <p className="text-lg font-mono font-bold text-indigo-900">{currentIP}</p>
-                            </div>
-                            <button 
-                                onClick={() => {
-                                    if (currentIP && !state.authorizedIPs?.includes(currentIP)) {
-                                        setState(prev => ({ ...prev, authorizedIPs: [...(prev.authorizedIPs || []), currentIP] }));
-                                    }
-                                }}
-                                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-md"
-                            >
-                                Autorizar mi IP
-                            </button>
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Añadir IP Manualmente</label>
-                            <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    placeholder="Ej: 192.168.1.1"
-                                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                                    value={newIPInput}
-                                    onChange={(e) => setNewIPInput(e.target.value)}
-                                />
-                                <button 
-                                    onClick={addAuthorizedIP}
-                                    className="bg-slate-900 text-white p-3 rounded-xl hover:bg-slate-800"
-                                >
-                                    <PlusCircle className="w-6 h-6" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Lista de IPs Autorizadas</label>
-                            {state.authorizedIPs?.length === 0 ? (
-                                <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">No hay IPs restringidas. La aplicación es pública.</p>
-                            ) : (
-                                state.authorizedIPs?.map(ip => (
-                                    <div key={ip} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all">
-                                        <span className="font-mono font-bold text-slate-700">{ip}</span>
-                                        <button onClick={() => removeAuthorizedIP(ip)} className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                    <div className="bg-slate-50 p-6 flex justify-end">
-                        <button 
-                            onClick={() => setShowSettingsModal(false)}
-                            className="px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl text-sm"
-                        >
-                            Finalizar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {showCalculator && <DraggableCalculator onClose={() => setShowCalculator(false)} />}
-        </div>
       </div>
 
       <div className="bg-slate-50 border-t border-slate-300 px-4 py-2 text-sm text-slate-500 flex justify-between items-center shrink-0 select-none font-medium">
          <div className="flex gap-4 items-center"><span className="flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500"/> Listo</span><span>{state.masterItems.length} Refs</span><span>{state.items.length} Filas</span><span>{state.checkedRowIds.size} Marcadas</span></div>
-         {selectedSum > 0 && (<div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full animate-in fade-in slide-in-from-bottom-2"><Sigma className="w-4 h-4" /><span className="uppercase text-xs font-bold tracking-wider">Suma Seleccionada:</span><span className="font-mono font-bold text-base">{formatCurrency(selectedSum)}</span></div>)}
+         {selectedSum > 0 && isAccessAllowed && (<div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full animate-in fade-in slide-in-from-bottom-2"><Sigma className="w-4 h-4" /><span className="uppercase text-xs font-bold tracking-wider">Suma Seleccionada:</span><span className="font-mono font-bold text-base">{formatCurrency(selectedSum)}</span></div>)}
          <div className="font-mono opacity-50 hidden md:block">CertiTensa v4.5</div>
       </div>
+
+      {/* LOGIN MODAL */}
+      {showSettingsLogin && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200">
+                  <div className="bg-slate-900 p-6 flex flex-col items-center">
+                      <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white mb-3">
+                          <Lock className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-white font-bold text-lg">Seguridad</h3>
+                  </div>
+                  <form onSubmit={handleSettingsLogin} className="p-6">
+                      <label className="block text-sm font-bold text-slate-600 mb-2">Contraseña de Administrador</label>
+                      <input 
+                        autoFocus
+                        type="password" 
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all mb-6 text-center text-lg tracking-widest"
+                        placeholder="••••"
+                        value={settingsPassword}
+                        onChange={(e) => setSettingsPassword(e.target.value)}
+                      />
+                      <div className="flex gap-3">
+                          <button type="button" onClick={() => setShowSettingsLogin(false)} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-lg transition-colors">Cancelar</button>
+                          <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-lg">Entrar</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
+      {/* SETTINGS MODAL */}
+      {showSettingsModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                  <div className="bg-white border-b border-slate-100 p-6 flex items-center justify-between sticky top-0 z-10">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-slate-100 p-2 rounded-lg text-slate-700"><Settings className="w-6 h-6" /></div>
+                          <div>
+                              <h2 className="text-xl font-bold text-slate-900">Control de Acceso IP</h2>
+                              <p className="text-sm text-slate-500">Gestione las direcciones autorizadas para usar la aplicación.</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-50 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+                  </div>
+                  
+                  <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+                      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Añadir Nueva IP</h4>
+                          <div className="flex gap-2 mb-3">
+                              <input 
+                                type="text" 
+                                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono text-sm"
+                                placeholder="Ej: 192.168.1.1"
+                                value={ipInput}
+                                onChange={(e) => setIpInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddIP()}
+                              />
+                              <button onClick={handleAddIP} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"><Plus className="w-4 h-4" /> Añadir</button>
+                          </div>
+                          <div className="flex items-center justify-between bg-blue-50 px-4 py-3 rounded-lg border border-blue-100">
+                              <div className="flex items-center gap-2 text-blue-800">
+                                  <Globe className="w-4 h-4" />
+                                  <span className="text-sm font-medium">Su IP actual es: <strong>{currentIP}</strong></span>
+                              </div>
+                              <button 
+                                onClick={() => { setIpInput(currentIP); handleAddIP(); }}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                Autorizar mi IP
+                              </button>
+                          </div>
+                      </div>
+
+                      <div>
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">IPs Autorizadas ({allowedIPs.length})</h4>
+                          {allowedIPs.length === 0 ? (
+                              <div className="text-center py-8 text-slate-400 bg-slate-100 rounded-xl border border-dashed border-slate-300">
+                                  <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                  <p>No hay IPs configuradas.</p>
+                                  <p className="text-xs mt-1">Nadie puede acceder a la aplicación.</p>
+                              </div>
+                          ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {allowedIPs.map(ip => (
+                                      <div key={ip} className="flex items-center justify-between bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-sm group">
+                                          <div className="flex items-center gap-3">
+                                              <div className={`w-2 h-2 rounded-full ${ip === currentIP ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-300'}`}></div>
+                                              <span className="font-mono text-slate-700 font-medium">{ip}</span>
+                                              {ip === currentIP && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">TÚ</span>}
+                                          </div>
+                                          <button onClick={() => handleRemoveIP(ip)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
+                      <button onClick={() => setShowSettingsModal(false)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-colors shadow-lg">Guardar y Cerrar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <style>{`
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         tr { page-break-inside: avoid; }
         thead { display: table-header-group; }
         .avoid-break, .avoid-break > * { page-break-inside: avoid !important; break-inside: avoid !important; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
     </div>
   );
