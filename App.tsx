@@ -38,7 +38,12 @@ import {
   Database,
   FileOutput,
   Move,
-  HardDrive
+  HardDrive,
+  Settings,
+  Lock,
+  ShieldAlert,
+  Globe,
+  PlusCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -63,6 +68,7 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
 };
 
 const STORAGE_KEY = 'certipro_autosave_v1';
+const SETTINGS_PASSWORD = "3229";
 
 // Helper to generate N empty rows
 const generateEmptyRows = (count: number): BudgetItem[] => {
@@ -581,7 +587,8 @@ const App: React.FC = () => {
             return {
                 ...parsed,
                 checkedRowIds: new Set(Array.isArray(parsed.checkedRowIds) ? parsed.checkedRowIds : []),
-                isLoading: false
+                isLoading: false,
+                authorizedIPs: parsed.authorizedIPs || []
             };
         }
     } catch (e) {
@@ -593,10 +600,41 @@ const App: React.FC = () => {
         projectInfo: INITIAL_PROJECT_INFO,
         isLoading: false,
         checkedRowIds: new Set(),
-        loadedFileName: undefined
+        loadedFileName: undefined,
+        authorizedIPs: []
     };
   });
   
+  // --- IP SECURITY STATE ---
+  const [currentIP, setCurrentIP] = useState<string>('');
+  const [ipLoading, setIpLoading] = useState(true);
+  const [showSettingsAuth, setShowSettingsAuth] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [authPassword, setAuthPassword] = useState('');
+  const [newIPInput, setNewIPInput] = useState('');
+
+  // Fetch Public IP on mount
+  useEffect(() => {
+    const fetchIP = async () => {
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            setCurrentIP(data.ip);
+        } catch (err) {
+            console.error("Error fetching IP", err);
+        } finally {
+            setIpLoading(false);
+        }
+    };
+    fetchIP();
+  }, []);
+
+  const isIPAuthorized = useMemo(() => {
+      if (ipLoading) return true; // Let it load
+      if (!state.authorizedIPs || state.authorizedIPs.length === 0) return true; // First time use
+      return state.authorizedIPs.includes(currentIP);
+  }, [currentIP, state.authorizedIPs, ipLoading]);
+
   const [searchTerm, setSearchTerm] = useState('');
   useEffect(() => {
      if (!state) return;
@@ -829,7 +867,8 @@ const App: React.FC = () => {
           items: state.items,
           masterItems: state.masterItems,
           checkedRowIds: Array.from(state.checkedRowIds || []),
-          loadedFileName: state.loadedFileName
+          loadedFileName: state.loadedFileName,
+          authorizedIPs: state.authorizedIPs
       };
       const jsonString = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
@@ -886,7 +925,8 @@ const App: React.FC = () => {
                       : (Array.isArray(data.masterItems) ? data.masterItems : []), 
                   isLoading: false,
                   checkedRowIds: new Set(Array.isArray(data.checkedRowIds) ? data.checkedRowIds : []),
-                  loadedFileName: hasLocalMasterItems ? state.loadedFileName : data.loadedFileName
+                  loadedFileName: hasLocalMasterItems ? state.loadedFileName : data.loadedFileName,
+                  authorizedIPs: data.authorizedIPs || state.authorizedIPs || []
               });
           } catch (error) {
               console.error(error);
@@ -1451,6 +1491,168 @@ const App: React.FC = () => {
       return sum;
   }, [selectedCellIndices, filteredItems, state.projectInfo.isAveria]);
 
+  const handleSettingsAuth = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (authPassword === SETTINGS_PASSWORD) {
+          setShowSettingsAuth(false);
+          setShowSettingsModal(true);
+          setAuthPassword('');
+      } else {
+          alert("Contraseña incorrecta");
+      }
+  };
+
+  const addAuthorizedIP = () => {
+      if (!newIPInput || state.authorizedIPs?.includes(newIPInput)) return;
+      setState(prev => ({
+          ...prev,
+          authorizedIPs: [...(prev.authorizedIPs || []), newIPInput]
+      }));
+      setNewIPInput('');
+  };
+
+  const removeAuthorizedIP = (ip: string) => {
+      setState(prev => ({
+          ...prev,
+          authorizedIPs: prev.authorizedIPs?.filter(i => i !== ip) || []
+      }));
+  };
+
+  if (!isIPAuthorized && !ipLoading) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6">
+              <div className="bg-slate-800 p-10 rounded-3xl shadow-2xl border border-slate-700 max-w-md w-full text-center animate-in zoom-in duration-300">
+                  <div className="bg-red-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ring-4 ring-red-500/20">
+                    <ShieldAlert className="w-10 h-10 text-red-500" />
+                  </div>
+                  <h1 className="text-3xl font-black mb-4 tracking-tight">Acceso Restringido</h1>
+                  <p className="text-slate-400 mb-8 leading-relaxed">
+                      Esta aplicación solo puede ser utilizada desde conexiones autorizadas. Tu dirección IP actual no figura en nuestra lista blanca.
+                  </p>
+                  
+                  <div className="bg-slate-950/50 p-4 rounded-2xl mb-8 border border-slate-700/50">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tu IP Pública</p>
+                      <p className="text-xl font-mono font-bold text-indigo-400">{currentIP || 'Detectando...'}</p>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => setShowSettingsAuth(true)}
+                        className="bg-white text-slate-900 font-black py-4 rounded-2xl hover:bg-slate-200 transition-all flex items-center justify-center gap-3"
+                    >
+                        <Lock className="w-5 h-5" /> PANEL DE CONTROL
+                    </button>
+                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Requiere autorización de administrador</p>
+                  </div>
+              </div>
+
+              {/* AUTH MODAL FROM BLOCKED SCREEN */}
+              {showSettingsAuth && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-200">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="bg-indigo-100 p-2 rounded-xl">
+                                <Settings className="w-6 h-6 text-indigo-600" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900">Configuración</h2>
+                        </div>
+                        <form onSubmit={handleSettingsAuth}>
+                            <p className="text-sm text-slate-500 mb-4 font-medium">Introduzca la contraseña de administrador:</p>
+                            <input 
+                                type="password" 
+                                autoFocus
+                                className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl mb-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl tracking-widest font-bold"
+                                value={authPassword}
+                                onChange={(e) => setAuthPassword(e.target.value)}
+                            />
+                            <div className="flex gap-3">
+                                <button type="button" onClick={() => setShowSettingsAuth(false)} className="flex-1 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
+                                <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-200">Entrar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+              )}
+
+              {/* SETTINGS MODAL FROM BLOCKED SCREEN */}
+              {showSettingsModal && (
+                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200">
+                        <div className="bg-slate-50 p-6 border-b border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Globe className="w-6 h-6 text-indigo-600" />
+                                <h2 className="text-xl font-bold text-slate-900">Control de Accesos IP</h2>
+                            </div>
+                            <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+                        </div>
+                        <div className="p-8">
+                            <div className="bg-indigo-50 p-4 rounded-2xl mb-8 border border-indigo-100 flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Tu IP actual detectada</p>
+                                    <p className="text-lg font-mono font-bold text-indigo-900">{currentIP}</p>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        if (currentIP && !state.authorizedIPs?.includes(currentIP)) {
+                                            setState(prev => ({ ...prev, authorizedIPs: [...(prev.authorizedIPs || []), currentIP] }));
+                                        }
+                                    }}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-md"
+                                >
+                                    Autorizar mi IP
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Añadir IP Manualmente</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Ej: 192.168.1.1"
+                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                                        value={newIPInput}
+                                        onChange={(e) => setNewIPInput(e.target.value)}
+                                    />
+                                    <button 
+                                        onClick={addAuthorizedIP}
+                                        className="bg-slate-900 text-white p-3 rounded-xl hover:bg-slate-800"
+                                    >
+                                        <PlusCircle className="w-6 h-6" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Lista de IPs Autorizadas</label>
+                                {state.authorizedIPs?.length === 0 ? (
+                                    <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">No hay IPs restringidas. La aplicación es pública.</p>
+                                ) : (
+                                    state.authorizedIPs?.map(ip => (
+                                        <div key={ip} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all">
+                                            <span className="font-mono font-bold text-slate-700">{ip}</span>
+                                            <button onClick={() => removeAuthorizedIP(ip)} className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 p-6 flex justify-end">
+                            <button 
+                                onClick={() => setShowSettingsModal(false)}
+                                className="px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl text-sm"
+                            >
+                                Finalizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+              )}
+          </div>
+      );
+  }
+
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
 
   const totalAmount = state.items.reduce((acc, curr) => {
@@ -1534,6 +1736,15 @@ const App: React.FC = () => {
                  <div><h1 className="text-xl font-bold text-slate-900 leading-tight">TENSA SA</h1></div>
              </div>
              <div className="flex items-center gap-2">
+                 {/* SETTINGS BUTTON */}
+                 <button 
+                    onClick={() => setShowSettingsAuth(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded hover:bg-slate-200 transition-all mr-2"
+                    title="Ajustes de Seguridad"
+                 >
+                     <Settings className="w-4 h-4" />
+                 </button>
+
                  <div className="flex items-center gap-2 mr-4 border-r border-slate-200 pr-4">
                      <button onClick={undo} onMouseDown={(e) => e.preventDefault()} disabled={history.past.length === 0 && (!historySnapshot.current || historySnapshot.current === state)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Deshacer (Ctrl+Z)"><Undo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Deshacer</span></button>
                      <button onClick={redo} onMouseDown={(e) => e.preventDefault()} disabled={history.future.length === 0} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-400 rounded-md shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all" title="Rehacer (Ctrl+Y)"><Redo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Rehacer</span></button>
@@ -1704,6 +1915,111 @@ const App: React.FC = () => {
               </div>
             </div>
         )}
+
+        {/* SETTINGS AUTH MODAL (IN-APP) */}
+        {showSettingsAuth && (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-200">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="bg-indigo-100 p-2 rounded-xl">
+                            <Settings className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-slate-900">Ajustes de Seguridad</h2>
+                    </div>
+                    <form onSubmit={handleSettingsAuth}>
+                        <p className="text-sm text-slate-500 mb-4 font-medium">Introduzca la contraseña para acceder:</p>
+                        <input 
+                            type="password" 
+                            autoFocus
+                            className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl mb-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl tracking-widest font-bold"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                        />
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setShowSettingsAuth(false)} className="flex-1 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
+                            <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-200">Acceder</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* SETTINGS MODAL (IN-APP) */}
+        {showSettingsModal && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200">
+                    <div className="bg-slate-50 p-6 border-b border-slate-200 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <Globe className="w-6 h-6 text-indigo-600" />
+                            <h2 className="text-xl font-bold text-slate-900">Control de Accesos IP</h2>
+                        </div>
+                        <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+                    </div>
+                    <div className="p-8">
+                        <div className="bg-indigo-50 p-4 rounded-2xl mb-8 border border-indigo-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Tu IP actual detectada</p>
+                                <p className="text-lg font-mono font-bold text-indigo-900">{currentIP}</p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    if (currentIP && !state.authorizedIPs?.includes(currentIP)) {
+                                        setState(prev => ({ ...prev, authorizedIPs: [...(prev.authorizedIPs || []), currentIP] }));
+                                    }
+                                }}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-md"
+                            >
+                                Autorizar mi IP
+                            </button>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Añadir IP Manualmente</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    placeholder="Ej: 192.168.1.1"
+                                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                                    value={newIPInput}
+                                    onChange={(e) => setNewIPInput(e.target.value)}
+                                />
+                                <button 
+                                    onClick={addAuthorizedIP}
+                                    className="bg-slate-900 text-white p-3 rounded-xl hover:bg-slate-800"
+                                >
+                                    <PlusCircle className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Lista de IPs Autorizadas</label>
+                            {state.authorizedIPs?.length === 0 ? (
+                                <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">No hay IPs restringidas. La aplicación es pública.</p>
+                            ) : (
+                                state.authorizedIPs?.map(ip => (
+                                    <div key={ip} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all">
+                                        <span className="font-mono font-bold text-slate-700">{ip}</span>
+                                        <button onClick={() => removeAuthorizedIP(ip)} className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                    <div className="bg-slate-50 p-6 flex justify-end">
+                        <button 
+                            onClick={() => setShowSettingsModal(false)}
+                            className="px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl text-sm"
+                        >
+                            Finalizar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {showCalculator && <DraggableCalculator onClose={() => setShowCalculator(false)} />}
         </div>
       </div>
@@ -1718,6 +2034,10 @@ const App: React.FC = () => {
         tr { page-break-inside: avoid; }
         thead { display: table-header-group; }
         .avoid-break, .avoid-break > * { page-break-inside: avoid !important; break-inside: avoid !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
     </div>
   );

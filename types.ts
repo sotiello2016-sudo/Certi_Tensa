@@ -40,4 +40,5 @@ export interface AppState {
   isLoading: boolean;
   checkedRowIds: Set<string>; // Items currently checked/ticked
   loadedFileName?: string; // Name of the loaded resources Excel file
+  authorizedIPs?: string[]; // List of public IPs allowed to use the app
 }
