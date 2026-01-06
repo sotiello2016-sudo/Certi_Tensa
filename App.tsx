@@ -4,7 +4,6 @@ import {
   Save,
   Upload, 
   Trash2, 
-  Search,
   X,
   Plus,
   Eraser,
@@ -104,7 +103,6 @@ interface RowProps {
     isInSelection: boolean;
     isAveria: boolean;
     certificationType: CertificationType;
-    searchTerm: string;
     activeSearch: { rowId: string, field: 'code' | 'description' } | null;
     editingCell: { rowId: string, field: string } | null;
     masterItems: BudgetItem[];
@@ -129,7 +127,7 @@ interface RowProps {
 }
 
 const BudgetItemRow = React.memo(({
-    item, index, isChecked, isSelected, isInSelection, isAveria, certificationType, searchTerm, 
+    item, index, isChecked, isSelected, isInSelection, isAveria, certificationType, 
     activeSearch, editingCell, masterItems,
     onToggleCheck, onSetSelectedRow, onDragStart, onDragOver, onDragEnd, onDrop,
     onUpdateField, onUpdateQuantity, onFillRow, onAddEmpty, onDelete,
@@ -193,16 +191,13 @@ const BudgetItemRow = React.memo(({
             </td>
 
             <td 
-                className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 ${!searchTerm ? 'cursor-move hover:text-slate-600 active:text-slate-800' : 'cursor-default opacity-50'} ${isSelected ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
-                draggable={!searchTerm}
-                onDragStart={(e) => {
-                    if (searchTerm) { e.preventDefault(); return; }
-                    onDragStart(e, index);
-                }}
+                className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 cursor-move hover:text-slate-600 active:text-slate-800 ${isSelected ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
+                draggable={true}
+                onDragStart={(e) => onDragStart(e, index)}
                 onDragOver={onDragOver}
                 onDragEnd={onDragEnd}
                 onDrop={(e) => onDrop(e, index)}
-                title={searchTerm ? "Reordenar desactivado durante la búsqueda" : "Arrastrar para reordenar fila"}
+                title="Arrastrar para reordenar fila"
             >
                 {index + 1}
             </td>
@@ -435,7 +430,6 @@ const BudgetItemRow = React.memo(({
     if (prev.isInSelection !== next.isInSelection) return false;
     if (prev.isAveria !== next.isAveria) return false;
     if (prev.certificationType !== next.certificationType) return false;
-    if (prev.searchTerm !== next.searchTerm) return false;
     
     const prevEdit = prev.editingCell;
     const nextEdit = next.editingCell;
@@ -744,7 +738,6 @@ const App: React.FC = () => {
       setAllowedIPs(prev => prev.filter(item => item !== ip));
   };
   
-  const [searchTerm, setSearchTerm] = useState('');
   useEffect(() => {
      if (!state) return;
      try {
@@ -792,16 +785,6 @@ const App: React.FC = () => {
   const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
   const [activeSearch, setActiveSearch] = useState<{ rowId: string, field: 'code' | 'description' } | null>(null);
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
-
-  const filteredItems = useMemo(() => {
-    if (!searchTerm.trim()) return state.items;
-    const lower = searchTerm.toLowerCase();
-    return state.items.filter(i => 
-        (state.projectInfo.certificationType === 'iberdrola' && i.code.toLowerCase().includes(lower)) || 
-        i.description.toLowerCase().includes(lower) || 
-        (i.observations && i.observations.toLowerCase().includes(lower))
-    );
-  }, [state.items, searchTerm, state.projectInfo.certificationType]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1417,14 +1400,14 @@ const App: React.FC = () => {
   const selectedSum = useMemo(() => {
       let sum = 0;
       selectedCellIndices.forEach(index => {
-          const item = filteredItems[index];
+          const item = state.items[index];
           if (item) {
               const k = (state.projectInfo.certificationType === 'iberdrola' && state.projectInfo.isAveria) ? (item.kFactor || 1) : 1;
               sum += roundToTwo(item.currentQuantity * k * item.unitPrice);
           }
       });
       return sum;
-  }, [selectedCellIndices, filteredItems, state.projectInfo.isAveria, state.projectInfo.certificationType]);
+  }, [selectedCellIndices, state.items, state.projectInfo.isAveria, state.projectInfo.certificationType]);
 
   const totalAmount = state.items.reduce((acc, curr) => {
       const k = (state.projectInfo.certificationType === 'iberdrola' && state.projectInfo.isAveria) ? (curr.kFactor || 1) : 1;
@@ -1449,13 +1432,11 @@ const App: React.FC = () => {
   }, [activeSearch]);
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
-      if (searchTerm) { e.preventDefault(); return; }
       setDraggedRowIndex(index);
       draggedRowIndexRef.current = index;
-  }, [searchTerm]);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-      if (searchTerm) return;
       e.preventDefault();
       if (tableContainerRef.current) {
           const { top, bottom } = tableContainerRef.current.getBoundingClientRect();
@@ -1464,10 +1445,9 @@ const App: React.FC = () => {
           else if (e.clientY > bottom - threshold) autoScrollSpeed.current = 15;
           else autoScrollSpeed.current = 0;
       }
-  }, [searchTerm]);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent, index: number) => {
-      if (searchTerm) return;
       e.preventDefault();
       autoScrollSpeed.current = 0;
       if (draggedRowIndexRef.current !== null) {
@@ -1475,7 +1455,7 @@ const App: React.FC = () => {
           setDraggedRowIndex(null);
           draggedRowIndexRef.current = null;
       }
-  }, [searchTerm, moveRow]);
+  }, [moveRow]);
 
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
 
@@ -1544,9 +1524,9 @@ const App: React.FC = () => {
          {isAccessAllowed && (
              <div className="px-6 py-4 bg-slate-50/50">
                  <div className="grid grid-cols-12 gap-x-6 gap-y-4">
-                     <div className="col-span-6"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Denominación</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-2xl font-bold text-slate-800 pb-1" value={state.projectInfo.name} onChange={(e) => updateProjectInfo('name', e.target.value)} /></div>
-                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Nº Obra</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1" value={state.projectInfo.projectNumber} onChange={(e) => updateProjectInfo('projectNumber', e.target.value)} /></div>
-                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Nº Pedido</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1" value={state.projectInfo.orderNumber} onChange={(e) => updateProjectInfo('orderNumber', e.target.value)} /></div>
+                     <div className="col-span-6"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Denominación</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-2xl font-bold text-slate-800 pb-1 hover:border-slate-400 transition-colors" value={state.projectInfo.name} onChange={(e) => updateProjectInfo('name', e.target.value)} /></div>
+                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Nº Obra</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 hover:border-slate-400 transition-colors" value={state.projectInfo.projectNumber} onChange={(e) => updateProjectInfo('projectNumber', e.target.value)} /></div>
+                     <div className="col-span-2"><label className="block text-sm font-bold text-slate-400 uppercase mb-1">Nº Pedido</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-sans text-slate-700 pb-1 hover:border-slate-400 transition-colors" value={state.projectInfo.orderNumber} onChange={(e) => updateProjectInfo('orderNumber', e.target.value)} /></div>
                      <div className="col-span-2 flex items-end">
                         {isIberdrola && (
                             <label className="flex items-center gap-2 cursor-pointer select-none bg-red-50 px-3 py-2 rounded border border-red-100 hover:bg-red-100 transition-colors w-full">
@@ -1555,8 +1535,8 @@ const App: React.FC = () => {
                             </label>
                         )}
                      </div>
-                     <div className="col-span-8"><label className="block text-sm text-slate-400 font-bold uppercase mb-1">Cliente</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1" value={state.projectInfo.client} onChange={(e) => updateProjectInfo('client', e.target.value)} /></div>
-                     <div className="col-span-2"><label className="block text-sm text-slate-400 font-bold uppercase mb-1">Fecha</label><input type="date" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1" value={state.projectInfo.date} onChange={(e) => updateProjectInfo('date', e.target.value)} /></div>
+                     <div className="col-span-8"><label className="block text-sm text-slate-400 font-bold uppercase mb-1">Cliente</label><input type="text" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 hover:border-slate-400 transition-colors" value={state.projectInfo.client} onChange={(e) => updateProjectInfo('client', e.target.value)} /></div>
+                     <div className="col-span-2"><label className="block text-sm text-slate-400 font-bold uppercase mb-1">Fecha</label><input type="date" className="w-full bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-lg font-medium text-slate-700 pb-1 cursor-pointer hover:border-slate-400 transition-colors" value={state.projectInfo.date} onChange={(e) => updateProjectInfo('date', e.target.value)} /></div>
                      <div className="col-span-2 text-right"><label className="block text-sm text-slate-400 font-bold uppercase mb-1">Total Acumulado</label><div className="text-3xl font-sans font-bold text-emerald-700 leading-none pb-1 tabular-nums">{formatCurrency(totalAmount)}</div></div>
                      {state.projectInfo.isAveria && isIberdrola && (
                        <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm">
@@ -1607,7 +1587,7 @@ const App: React.FC = () => {
         {isAccessAllowed ? (
             <div className="flex flex-col h-full bg-white relative">
               <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-12 shrink-0">
-                 <div className="relative group"><Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" /><input type="text" className="pl-9 pr-8 py-1.5 bg-white border border-slate-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 shadow-sm" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                 <div className="relative group"></div>
               </div>
               <div ref={tableContainerRef} className="flex-1 overflow-auto relative bg-slate-100/50">
                 <table className="w-full border-collapse text-base table-fixed min-w-[1050px] bg-white select-none">
@@ -1626,8 +1606,8 @@ const App: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {filteredItems.map((item, index) => (
-                        <BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria && isIberdrola} certificationType={state.projectInfo.certificationType} searchTerm={searchTerm} activeSearch={activeSearch} editingCell={editingCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />
+                    {state.items.map((item, index) => (
+                        <BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria && isIberdrola} certificationType={state.projectInfo.certificationType} activeSearch={activeSearch} editingCell={editingCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />
                     ))}
                   </tbody>
                 </table>
