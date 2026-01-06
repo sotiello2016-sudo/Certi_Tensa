@@ -19,8 +19,8 @@ export const roundToTwo = (num: number): number => {
 
 export const calculateItemTotals = (item: any) => {
   const totalQuantity = (item.previousQuantity || 0) + (item.currentQuantity || 0);
-  // Calculate K Factor (default to 1 if missing or 0)
-  const k = item.kFactor !== undefined && item.kFactor !== null ? item.kFactor : 1;
+  // Default to 1 if K is not set or if we are not in a mode that uses it
+  const k = (item.kFactor !== undefined && item.kFactor !== null) ? item.kFactor : 1;
   
   // Total Amount = Quantity * K * Price
   const totalAmount = roundToTwo(totalQuantity * k * item.unitPrice);

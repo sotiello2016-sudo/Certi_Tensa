@@ -16,6 +16,8 @@ export interface BudgetItem {
   observations?: string;
 }
 
+export type CertificationType = 'iberdrola' | 'others';
+
 export interface ProjectInfo {
   name: string;
   projectNumber: string;
@@ -24,6 +26,7 @@ export interface ProjectInfo {
   client: string;
   certificationNumber: number;
   date: string;
+  certificationType: CertificationType;
   // New flag for Breakdown/Fault mode
   isAveria?: boolean;
   // Averia specific details
