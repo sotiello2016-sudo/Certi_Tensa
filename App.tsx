@@ -264,8 +264,7 @@ const BudgetItemRow = React.memo(({
                     }}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            e.currentTarget.blur();
+                            switch (e.key) { case 'Enter': e.preventDefault(); e.currentTarget.blur(); break; }
                         }
                     }}
                     onFocus={(e) => {
@@ -456,44 +455,45 @@ const BudgetItemRow = React.memo(({
 });
 
 const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    const [pos, setPos] = useState({ x: window.innerWidth - 440, y: 120 });
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const containerRef = useRef<HTMLDivElement>(null);
+    const draggingRef = useRef(false);
+    const offsetRef = useRef({ x: 0, y: 0 });
+    const posRef = useRef({ x: window.innerWidth - 440, y: 120 });
+
     const [display, setDisplay] = useState('0');
     const [prevOperation, setPrevOperation] = useState('');
     const [isNewNumber, setIsNewNumber] = useState(true);
     const [isScientific, setIsScientific] = useState(false);
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        setIsDragging(true);
-        setDragOffset({
-            x: e.clientX - pos.x,
-            y: e.clientY - pos.y
-        });
+        draggingRef.current = true;
+        offsetRef.current = {
+            x: e.clientX - posRef.current.x,
+            y: e.clientY - posRef.current.y
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
     };
 
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (isDragging) {
-                setPos({
-                    x: e.clientX - dragOffset.x,
-                    y: e.clientY - dragOffset.y
-                });
-            }
-        };
-        const handleMouseUp = () => {
-            setIsDragging(false);
-        };
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!draggingRef.current || !containerRef.current) return;
+        const newX = e.clientX - offsetRef.current.x;
+        const newY = e.clientY - offsetRef.current.y;
+        posRef.current = { x: newX, y: newY };
+        containerRef.current.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+    }, []);
 
-        if (isDragging) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
+    const handleMouseUp = useCallback(() => {
+        draggingRef.current = false;
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    }, [handleMouseMove]);
+
+    useEffect(() => {
+        if (containerRef.current) {
+            containerRef.current.style.transform = `translate3d(${posRef.current.x}px, ${posRef.current.y}px, 0)`;
         }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isDragging, dragOffset]);
+    }, []);
 
     const handleNumber = (num: string) => {
         if (isNewNumber) {
@@ -560,8 +560,9 @@ const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
     return (
         <div 
-            className={`fixed z-[200] ${isScientific ? 'w-[480px]' : 'w-80'} bg-slate-800 rounded-lg shadow-2xl border border-slate-600 overflow-hidden flex flex-col transition-all duration-300 ease-in-out`}
-            style={{ left: pos.x, top: pos.y }}
+            ref={containerRef}
+            className={`fixed z-[200] ${isScientific ? 'w-[480px]' : 'w-80'} bg-slate-800 rounded-lg shadow-2xl border border-slate-600 overflow-hidden flex flex-col top-0 left-0 will-change-transform`}
+            style={{ transition: 'width 0.3s ease-in-out' }}
         >
             <div 
                 className="bg-slate-900 px-4 py-2 flex items-center justify-between cursor-move select-none border-b border-slate-700"
@@ -599,41 +600,33 @@ const DraggableCalculator: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                         <button onClick={() => handleFunction('sin')} className={sciBtnClass}>sin</button>
                         <button onClick={() => handleFunction('cos')} className={sciBtnClass}>cos</button>
                         <button onClick={() => handleFunction('tan')} className={sciBtnClass}>tan</button>
-                        
                         <button onClick={() => handleFunction('log')} className={sciBtnClass}>log</button>
                         <button onClick={() => handleFunction('ln')} className={sciBtnClass}>ln</button>
                         <button onClick={() => handleFunction('sqrt')} className={sciBtnClass}>√</button>
-                        
                         <button onClick={() => handleFunction('sqr')} className={sciBtnClass}>x²</button>
                         <button onClick={() => handleFunction('exp')} className={sciBtnClass}>eˣ</button>
                         <button onClick={() => handleOperator('**')} className={sciBtnClass}>xʸ</button>
-                        
                         <button onClick={() => handleFunction('pi')} className={sciBtnClass}>π</button>
                         <button onClick={() => handleFunction('e')} className={sciBtnClass}>e</button>
                         <button onClick={() => handleNumber('(')} className={sciBtnClass}>(</button>
                         <button onClick={() => handleNumber(')')} className={`${sciBtnClass} col-span-3`}>)</button>
                     </div>
                 )}
-                
                 <div className={`grid grid-cols-4 gap-2 p-4 pt-0 bg-slate-800 flex-1`}>
                     <button onClick={clear} className="col-span-3 h-11 flex items-center justify-center rounded bg-slate-600 hover:bg-slate-500 text-red-200 font-bold">AC</button>
                     <button onClick={() => handleOperator('÷')} className={opClass}><Divide className="w-5 h-5"/></button>
-
                     <button onClick={() => handleNumber('7')} className={btnClass}>7</button>
                     <button onClick={() => handleNumber('8')} className={btnClass}>8</button>
                     <button onClick={() => handleNumber('9')} className={btnClass}>9</button>
                     <button onClick={() => handleOperator('x')} className={opClass}><XIcon className="w-5 h-5"/></button>
-
                     <button onClick={() => handleNumber('4')} className={btnClass}>4</button>
                     <button onClick={() => handleNumber('5')} className={btnClass}>5</button>
                     <button onClick={() => handleNumber('6')} className={btnClass}>6</button>
                     <button onClick={() => handleOperator('-')} className={opClass}><Minus className="w-5 h-5"/></button>
-
                     <button onClick={() => handleNumber('1')} className={btnClass}>1</button>
                     <button onClick={() => handleNumber('2')} className={btnClass}>2</button>
                     <button onClick={() => handleNumber('3')} className={btnClass}>3</button>
                     <button onClick={() => handleOperator('+')} className={opClass}><Plus className="w-5 h-5"/></button>
-
                     <button onClick={() => handleNumber('0')} className={`${btnClass} col-span-2`}>0</button>
                     <button onClick={() => handleNumber('.')} className={btnClass}>.</button>
                     <button onClick={calculate} className="h-11 flex items-center justify-center rounded bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg shadow-sm"><Equal className="w-6 h-6"/></button>
@@ -813,7 +806,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (!isAccessAllowed) return; 
-
         if (e.key === 'Escape') {
             setSelectedCellIndices(new Set());
             selectedCellIndicesRef.current = new Set();
@@ -1009,18 +1001,16 @@ const App: React.FC = () => {
               if (!jsonString) return;
               let data = JSON.parse(jsonString);
               if (state && state.items.length > 0) saveHistory(state);
-              
-              const currentCertType = state.projectInfo.certificationType; // Capture current preference
+              const currentCertType = state.projectInfo.certificationType;
               const hasLocalMasterItems = state.masterItems && state.masterItems.length > 0;
               let loadedItems = Array.isArray(data.items) ? data.items : [];
               if (loadedItems.length < 200) {
                   loadedItems = [...loadedItems, ...generateEmptyRows(200 - loadedItems.length)];
               }
-              
               setState({
                   projectInfo: {
                       ...(data.projectInfo || INITIAL_PROJECT_INFO),
-                      certificationType: currentCertType // MAINTAIN current selection as requested
+                      certificationType: currentCertType
                   },
                   items: loadedItems,
                   masterItems: hasLocalMasterItems ? state.masterItems : (Array.isArray(data.masterItems) ? data.masterItems : []), 
@@ -1178,13 +1168,11 @@ const App: React.FC = () => {
     const isAveria = projectInfo.isAveria && projectInfo.certificationType === 'iberdrola';
     const isIberdrola = projectInfo.certificationType === 'iberdrola';
     const marginDivisor = type === 'proforma' && marginPercentage !== 0 ? (1 + marginPercentage / 100) : 1;
-    
     const doc = new jsPDF({ orientation: orientation, unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.width;
     const pageHeight = doc.internal.pageSize.height;
     const margin = 12;
     const rightMargin = pageWidth - 14;
-    
     doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(50);
     doc.text("TENSA SA", rightMargin, 12, { align: "right" });
     doc.setFont("helvetica", "normal").setTextColor(100);
@@ -1194,13 +1182,11 @@ const App: React.FC = () => {
     doc.text("CIF: A33020074", rightMargin, 28, { align: "right" });
     doc.setFont("helvetica", "bold").setTextColor(150).text("FECHA", rightMargin, 36, { align: "right" });
     doc.setFontSize(12).setTextColor(0).text(new Date(projectInfo.date).toLocaleDateString(), rightMargin, 41, { align: "right" });
-    
     const title = type === 'proforma' 
         ? (isAveria ? "FACTURA PROFORMA (AVERÍA)" : "FACTURA PROFORMA") 
         : (isAveria ? "CERTIFICACIÓN DE OBRA (AVERÍA)" : "CERTIFICACIÓN DE OBRA");
     doc.setTextColor(0).setFontSize(18).setFont("helvetica", "bold").text(title.toUpperCase(), margin, 15);
     doc.setFontSize(14).text(projectInfo.name.toUpperCase(), margin, 24);
-    
     let yPos = 35;
     doc.setFontSize(10).setFont("helvetica", "bold").text("Nº Obra:", margin, yPos);
     doc.setFont("helvetica", "normal").text(projectInfo.projectNumber, margin + 18, yPos);
@@ -1210,7 +1196,6 @@ const App: React.FC = () => {
     doc.setFont("helvetica", "bold").text("Cliente:", margin, yPos);
     doc.setFont("helvetica", "normal").text(projectInfo.client, margin + 18, yPos);
     yPos += 10;
-
     if (isAveria) {
         doc.setDrawColor(220).setLineWidth(0.1).line(margin, yPos, pageWidth - margin, yPos);
         yPos += 6;
@@ -1223,26 +1208,21 @@ const App: React.FC = () => {
         doc.setTextColor(0).setFont("helvetica", "normal").text(horario, margin + 130, yPos);
         yPos += 6;
         doc.setTextColor(153, 27, 27).setFont("helvetica", "bold").text("DESCRIPCIÓN:", margin, yPos);
-        
-        // CORRECCIÓN: Cálculo dinámico de altura para que la descripción no pise la tabla
         const descText = projectInfo.averiaDescription || '';
         const maxWidth = pageWidth - margin * 2 - 28;
         doc.setTextColor(0).setFont("helvetica", "normal");
         const wrappedDesc = doc.splitTextToSize(descText, maxWidth);
         doc.text(wrappedDesc, margin + 28, yPos);
         const textDim = doc.getTextDimensions(wrappedDesc);
-        yPos += textDim.h + 8; // Ajustamos yPos dinámicamente según la altura del texto
+        yPos += textDim.h + 8;
     }
-
     doc.setDrawColor(0).setLineWidth(0.5).line(margin, yPos, pageWidth - margin, yPos);
     yPos += 5;
-
     const tableHead = isAveria 
         ? ["RECURSO", "DESCRIPCIÓN", "UD", "K", "PRECIO", "IMPORTE", "OBSERVACIONES"]
         : isIberdrola 
             ? ["RECURSO", "DESCRIPCIÓN", "UD", "PRECIO", "IMPORTE", "OBSERVACIONES"]
             : ["DESCRIPCIÓN", "UD", "PRECIO", "IMPORTE", "OBSERVACIONES"];
-
     const tableBody = items.map(item => {
         const k = isAveria ? (item.kFactor || 1) : 1;
         const adjPrice = item.unitPrice / marginDivisor;
@@ -1251,16 +1231,12 @@ const App: React.FC = () => {
         if (isIberdrola) return [item.code, item.description, formatNumber(item.currentQuantity), formatCurrency(adjPrice), formatCurrency(total), item.observations || ''];
         return [item.description, formatNumber(item.currentQuantity), formatCurrency(adjPrice), formatCurrency(total), item.observations || ''];
     });
-
-    let lastY = 0;
     let importeColRightEdge = 0;
-
     autoTable(doc, {
         startY: yPos,
         head: [tableHead],
         body: tableBody,
         theme: 'plain',
-        // MODIFICACIÓN: rowPageBreak: 'avoid' asegura que una fila no se parta entre dos hojas
         rowPageBreak: 'avoid',
         styles: { fontSize: 9, cellPadding: 3, valign: 'top', textColor: 20 },
         headStyles: { fontStyle: 'bold', textColor: 0, lineWidth: { bottom: 0.1 }, lineColor: 0 },
@@ -1272,7 +1248,6 @@ const App: React.FC = () => {
             0: { cellWidth: 'auto' }, 1: { cellWidth: 18, halign: 'center' }, 2: { cellWidth: 30, halign: 'right' }, 3: { cellWidth: 35, halign: 'right' }, 4: { cellWidth: 45 }
         },
         didParseCell: (data) => {
-          // Asegurar que la alineación del encabezado coincida con la alineación de la columna
           if (data.section === 'head') {
             const idx = data.column.index;
             if (isAveria) {
@@ -1292,23 +1267,16 @@ const App: React.FC = () => {
             if (data.column.index === totalIdx && data.section === 'body') importeColRightEdge = data.cell.x + data.cell.width;
         }
     });
-
-    lastY = (doc as any).lastAutoTable.finalY;
+    const lastY = (doc as any).lastAutoTable.finalY;
     const totalAmount = items.reduce((acc, curr) => {
         const k = isAveria ? (curr.kFactor || 1) : 1;
         return acc + roundToTwo(curr.currentQuantity * k * (curr.unitPrice / marginDivisor));
     }, 0);
-
     yPos = lastY + 10;
     if (yPos > pageHeight - 30) { doc.addPage(); yPos = 20; }
-    
     doc.setFontSize(12).setFont("helvetica", "bold");
-    // Alineación precisa del bloque TOTAL con el borde derecho de la columna de importes
     doc.text("TOTAL:", importeColRightEdge - 40, yPos, { align: 'right' });
     doc.text(formatCurrency(totalAmount), importeColRightEdge, yPos, { align: 'right' });
-    
-    // AÑADIDO: Numeración de páginas "hoja X de Y"
-    // FIX: Using doc.getNumberOfPages() directly as doc.internal.getNumberOfPages() is deprecated/missing in modern jsPDF types
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -1317,7 +1285,6 @@ const App: React.FC = () => {
         doc.setFont("helvetica", "normal");
         doc.text(`hoja ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
     }
-
     doc.save(`${type === 'proforma' ? 'Proforma' : 'Certificacion'}_${projectInfo.projectNumber || 'Obra'}.pdf`);
     setShowExportMenu(false);
   };
@@ -1397,11 +1364,24 @@ const App: React.FC = () => {
   const updateProjectInfo = (field: keyof ProjectInfo, value: any) => {
     setState(prev => {
       const newInfo = { ...prev.projectInfo, [field]: value };
-      if (field === 'certificationType' && value === 'others') {
-          newInfo.isAveria = false;
+      
+      let newItems = prev.items;
+
+      // Only recalculate items if certificationType or isAveria changes, as these affect item calculations
+      if (field === 'certificationType') {
+          // If switching to 'others', ensure isAveria is false
+          if (value === 'others') {
+              newInfo.isAveria = false;
+          }
+          // Recalculate kFactor-dependent totals for all items
+          newItems = prev.items.map(item => calculateItemTotals({ ...item, kFactor: newInfo.isAveria ? item.kFactor : 1 }));
+      } else if (field === 'isAveria') {
+          // Recalculate kFactor-dependent totals for all items when isAveria toggles
+          newItems = prev.items.map(item => calculateItemTotals({ ...item, kFactor: newInfo.isAveria ? (item.kFactor || 1) : 1 }));
       }
-      const recalculatedItems = prev.items.map(item => calculateItemTotals({ ...item, kFactor: newInfo.isAveria ? item.kFactor : 1 }));
-      return { ...prev, items: recalculatedItems, projectInfo: newInfo };
+      // For other fields (like averiaDescription), newItems remains prev.items, avoiding unnecessary map operations
+
+      return { ...prev, items: newItems, projectInfo: newInfo };
     });
   };
 
@@ -1514,8 +1494,6 @@ const App: React.FC = () => {
                      <button onClick={undo} disabled={!isAccessAllowed || (history.past.length === 0 && (!historySnapshot.current || historySnapshot.current === state))} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 rounded-md shadow-sm disabled:opacity-40 transition-all"><Undo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Deshacer</span></button>
                      <button onClick={redo} disabled={!isAccessAllowed || history.future.length === 0} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 rounded-md shadow-sm disabled:opacity-40 transition-all"><Redo className="w-4 h-4" /><span className="text-xs font-semibold hidden lg:inline">Rehacer</span></button>
                  </div>
-
-                 {/* Certification Type Dropdown */}
                  <div className={`relative ${!isAccessAllowed && "opacity-50 pointer-events-none"}`} ref={typeBtnRef}>
                     <button className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded hover:bg-slate-50 text-sm font-medium shadow-sm transition-colors" onClick={() => setShowTypeMenu(!showTypeMenu)}>
                         <Layers className="w-4 h-4 text-indigo-500" />
@@ -1529,10 +1507,8 @@ const App: React.FC = () => {
                         </div>
                     )}
                  </div>
-
                  <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium transition-colors select-none ${!isAccessAllowed && "opacity-50 pointer-events-none"}`} title="Cargar proyecto guardado (.json)"><FolderOpen className="w-4 h-4 text-orange-500" />Cargar Trabajo<input type="file" className="hidden" accept=".json" onChange={handleLoadProject} onClick={(e) => (e.currentTarget.value = '')} disabled={!isAccessAllowed} /></label>
                  <button onClick={handleSaveProject} className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-50 text-sm text-slate-700 font-medium transition-colors ${!isAccessAllowed && "opacity-50 pointer-events-none"}`} disabled={!isAccessAllowed}><Save className="w-4 h-4 text-blue-500" />Guardar Trabajo</button>
-                 
                  <div className={`flex items-center rounded border ml-4 transition-colors ${(!isAccessAllowed || !isIberdrola) ? "opacity-50 pointer-events-none" : ""} ${state.masterItems.length > 0 ? "bg-emerald-100 border-emerald-300 text-emerald-800 shadow-sm" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"}`}>
                      <label className="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm font-medium grow select-none hover:bg-opacity-80 rounded-l"><Upload className={`w-4 h-4 ${state.masterItems.length > 0 ? "text-emerald-700" : "text-slate-500"}`} />{state.masterItems.length > 0 ? "Tabla Rec. (OK)" : "Importar Tabla Rec."}<input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} onClick={(e) => (e.currentTarget.value = '')} disabled={!isAccessAllowed || !isIberdrola}/></label>
                      {state.masterItems.length > 0 && isIberdrola && (
@@ -1545,9 +1521,7 @@ const App: React.FC = () => {
                         </button>
                      )}
                  </div>
-
                  <button onClick={handleClearAll} disabled={!isAccessAllowed} className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-600 rounded hover:bg-red-50 text-sm font-medium transition-colors ml-2"><Eraser className="w-4 h-4" />Limpiar</button>
-                 
                  <div className={`relative ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""}`} ref={exportBtnRef}>
                     <button className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors" onClick={() => setShowExportMenu(!showExportMenu)}>
                         <Download className="w-4 h-4" />Exportar<ChevronDown className="w-3 h-3 opacity-70" />
@@ -1561,7 +1535,6 @@ const App: React.FC = () => {
                         </div>
                     )}
                  </div>
-
                  <button onClick={() => setShowCalculator(!showCalculator)} className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium ml-2 shadow-sm ${!isAccessAllowed ? "opacity-50 pointer-events-none" : ""} ${showCalculator ? "bg-slate-700 text-white" : "bg-white text-slate-700"}`} disabled={!isAccessAllowed}><Calculator className="w-4 h-4" /></button>
                  <button onClick={toggleFullscreen} className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded ml-2 ${!isAccessAllowed && "opacity-50"}`}>{isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}</button>
                  <button onClick={() => setShowSettingsLogin(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded text-sm font-medium ml-2 transition-colors"><Settings className="w-4 h-4" />Ajustes</button>
@@ -1591,7 +1564,37 @@ const App: React.FC = () => {
                            <div className="grid grid-cols-12 gap-6">
                                <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><input type="text" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} /></div>
                                <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><input type="date" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} /></div>
-                               <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Horario</label><select className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select></div>
+                               <div className="col-span-2">
+                                   <label className="block text-xs font-bold text-red-600 uppercase mb-1 flex items-center gap-1">
+                                       Horario 
+                                       <span className="relative group flex items-center">
+                                           <Info className="w-3.5 h-3.5 inline text-red-400 cursor-help" />
+                                           <div className="absolute left-full bottom-full mb-2 ml-1 w-80 bg-white p-4 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-[100] border border-red-100 animate-in fade-in slide-in-from-bottom-2">
+                                               <div className="flex items-center gap-2 mb-2 pb-1 border-b border-slate-100">
+                                                   <Clock className="w-4 h-4 text-red-600" />
+                                                   <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">Criterios de Horario</span>
+                                               </div>
+                                               <div className="space-y-3">
+                                                   <div>
+                                                       <div className="flex justify-between items-center mb-0.5">
+                                                           <span className="text-[10px] font-black text-red-700 uppercase">Diurna (K=1,25)</span>
+                                                           <span className="bg-red-50 text-red-700 text-[9px] px-1.5 py-0.5 rounded font-bold">Laborables</span>
+                                                       </div>
+                                                       <p className="text-xs text-slate-600 leading-relaxed font-medium">De 07:00h a 19:00h de Lunes a Viernes.</p>
+                                                   </div>
+                                                   <div>
+                                                       <div className="flex justify-between items-center mb-0.5">
+                                                           <span className="text-[10px] font-black text-indigo-700 uppercase">Nocturna (K=1,75)</span>
+                                                           <span className="bg-indigo-50 text-indigo-700 text-[9px] px-1.5 py-0.5 rounded font-bold">Especial</span>
+                                                       </div>
+                                                       <p className="text-xs text-slate-600 leading-relaxed font-medium">Resto de horas (19:00h a 07:00h), Fines de Semana y Festivos completos.</p>
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       </span>
+                                   </label>
+                                   <select className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select>
+                               </div>
                                <div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><textarea rows={2} className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} /></div>
                            </div>
                        </div>
@@ -1600,7 +1603,6 @@ const App: React.FC = () => {
              </div>
          )}
       </div>
-
       <div className="flex-1 overflow-hidden relative">
         {isAccessAllowed ? (
             <div className="flex flex-col h-full bg-white relative">
@@ -1646,37 +1648,47 @@ const App: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in"><div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden"><div className="p-6"><h3 className="text-xl font-bold text-slate-900 mb-4">¿Borrar todo?</h3><p className="text-slate-600 mb-6">Esta acción dejará la hoja completamente limpia.</p><div className="flex gap-3 justify-end"><button onClick={() => setShowClearDialog(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded">Cancelar</button><button onClick={confirmClearAll} className="px-5 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700 flex items-center gap-2"><Trash2 className="w-4 h-4" />Borrar todo</button></div></div></div></div>
               )}
             {showHelpDialog && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border flex flex-col max-h-[92vh]">
-                    <div className="bg-slate-50 px-8 py-7 flex items-center justify-between border-b relative overflow-hidden">
-                      <div className="flex items-center gap-4 relative z-10">
-                        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-3 rounded-2xl text-white shadow-lg"><HelpCircle className="w-7 h-7" /></div>
-                        <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Guía de Uso CertiTensa</h2></div>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                    <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
+                      <div className="flex items-center gap-3">
+                        <HelpCircle className="w-6 h-6 text-emerald-400" />
+                        <h2 className="text-xl font-bold">Guía de Uso CertiTensa</h2>
                       </div>
-                      <button onClick={() => setShowHelpDialog(false)} className="text-slate-400 hover:text-slate-900 p-2 rounded-xl hover:bg-slate-200 transition-all duration-200 relative z-10"><X className="w-7 h-7" /></button>
+                      <button onClick={() => setShowHelpDialog(false)} className="text-slate-400 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/50">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm hover:border-indigo-300 transition-all group">
-                                <h3 className="font-extrabold text-slate-800 text-lg mb-2">1. Tipo de Certificación</h3>
-                                <p className="text-slate-600 text-sm">Use el botón superior para cambiar entre <strong>Iberdrola</strong> (con recursos y averías) y <strong>Otros Clientes</strong> (formato simplificado).</p>
+                    <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
+                        <section className="flex gap-4">
+                            <div className="shrink-0 w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-lg">1</div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-1">Seleccionar Formato</h3>
+                                <p className="text-slate-600 leading-relaxed">Utilice el selector superior para cambiar entre <strong>Iberdrola</strong> (que incluye códigos de recurso y cálculos de avería) y <strong>Otros Clientes</strong> (un formato simplificado de descripción y precio).</p>
                             </div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm hover:border-emerald-300 transition-all group">
-                                <h3 className="font-extrabold text-slate-800 text-lg mb-2">2. Carga de Datos</h3>
-                                <p className="text-slate-600 text-sm">En modo Iberdrola, cargue el <strong>Excel de recursos</strong> para habilitar el autocompletado y búsqueda rápida.</p>
+                        </section>
+                        <section className="flex gap-4">
+                            <div className="shrink-0 w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-lg">2</div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-1">Cargar Presupuesto</h3>
+                                <p className="text-slate-600 leading-relaxed">En el modo Iberdrola, importe su archivo Excel para habilitar el autocompletado. Al empezar a escribir un código o descripción en las filas, se mostrarán sugerencias automáticas.</p>
                             </div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm hover:border-orange-300 transition-all group">
-                                <h3 className="font-extrabold text-slate-800 text-lg mb-2"> organization </h3>
-                                <p className="text-slate-600 text-sm">Arrastre desde el número de fila (#) para reordenar partidas. La numeración es automática.</p>
+                        </section>
+                        <section className="flex gap-4">
+                            <div className="shrink-0 w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold text-lg">3</div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-1">Gestión de Partidas</h3>
+                                <p className="text-slate-600 leading-relaxed">Puede reordenar las filas arrastrándolas desde el número de posición (#). Utilice el botón <strong>"+"</strong> para insertar filas nuevas o el icono de papelera para eliminar partidas innecesarias.</p>
                             </div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm hover:border-red-300 transition-all group">
-                                <h3 className="font-extrabold text-slate-800 text-lg mb-2">4. Exportación</h3>
-                                <p className="text-slate-600 text-sm">Los PDFs se adaptan automáticamente al tipo de certificación seleccionado para una presentación perfecta.</p>
+                        </section>
+                        <section className="flex gap-4">
+                            <div className="shrink-0 w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">4</div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg mb-1">Generar Informes</h3>
+                                <p className="text-slate-600 leading-relaxed">Exportar a <strong>Excel</strong> para cálculos internos o a <strong>PDF</strong> para entrega oficial. La opción "Proforma" permite aplicar un margen de beneficio porcentual a los precios antes de generar el documento.</p>
                             </div>
-                        </div>
+                        </section>
                     </div>
-                    <div className="bg-white p-8 border-t flex justify-end gap-4 items-center">
-                      <button onClick={() => setShowHelpDialog(false)} className="px-10 py-3.5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all flex items-center gap-3 text-sm">COMPRENDIDO <Check className="w-5 h-5" /></button>
+                    <div className="bg-slate-50 p-6 border-t flex justify-end">
+                      <button onClick={() => setShowHelpDialog(false)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-colors">Entendido</button>
                     </div>
                   </div>
                 </div>
@@ -1696,13 +1708,11 @@ const App: React.FC = () => {
             </div>
         )}
       </div>
-
       <div className="bg-slate-50 border-t border-slate-300 px-4 py-2 text-sm text-slate-500 flex justify-between items-center shrink-0 font-medium">
          <div className="flex gap-4 items-center"><span className="flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500"/> Listo</span><span>{state.masterItems.length} Refs</span><span>{state.items.length} Filas</span><span>{state.checkedRowIds.size} Marcadas</span></div>
          {selectedSum > 0 && isAccessAllowed && (<div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full"><Sigma className="w-4 h-4" /><span className="uppercase text-xs font-bold tracking-wider">Suma Seleccionada:</span><span className="font-mono font-bold text-base">{formatCurrency(selectedSum)}</span></div>)}
          <div className="font-mono opacity-50 hidden md:block">CertiTensa v5.0</div>
       </div>
-
       {showSettingsLogin && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -1715,7 +1725,6 @@ const App: React.FC = () => {
               </div>
           </div>
       )}
-
       {showSettingsModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -1739,7 +1748,6 @@ const App: React.FC = () => {
               </div>
           </div>
       )}
-
       <style>{`
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         tr { page-break-inside: avoid; }
