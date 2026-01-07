@@ -1467,9 +1467,13 @@ const App: React.FC = () => {
       return;
     }
 
-    // Always perform a fresh search to get an updated count
     const results: { rowIndex: number; field: keyof BudgetItem; rowId: string }[] = [];
-    const searchableFields: (keyof BudgetItem)[] = ['code', 'description', 'currentQuantity', 'kFactor', 'unitPrice', 'observations'];
+    const isIberdrolaSearch = state.projectInfo.certificationType === 'iberdrola';
+    
+    const searchableFields: (keyof BudgetItem)[] = isIberdrolaSearch
+        ? ['code', 'description', 'currentQuantity', 'kFactor', 'unitPrice', 'observations']
+        : ['description', 'currentQuantity', 'unitPrice', 'observations'];
+
     state.items.forEach((item, index) => {
       for (const field of searchableFields) {
         const value = item[field];
@@ -1481,17 +1485,13 @@ const App: React.FC = () => {
 
     let nextIndex;
     if (results.length === 0) {
-      // No results found
       nextIndex = -1;
     } else if (currentQuery !== lastSearchedQuery) {
-      // It's a brand new search term, so start from the first result
       nextIndex = 0;
     } else {
-      // It's a repeated search (user wants the next item), so advance the index
       nextIndex = (currentMatchIndex + 1) % results.length;
     }
     
-    // Update all state variables based on the new search
     setSearchResults(results);
     setCurrentMatchIndex(nextIndex);
     setLastSearchedQuery(currentQuery);
