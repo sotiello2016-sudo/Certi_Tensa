@@ -206,7 +206,7 @@ const BudgetItemRow = React.memo(({
                 <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
                     <textarea 
                         rows={1}
-                        className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                        className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                         value={item.code}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -249,7 +249,7 @@ const BudgetItemRow = React.memo(({
             <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
                 <textarea 
                     rows={1}
-                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                     value={item.description}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -290,7 +290,7 @@ const BudgetItemRow = React.memo(({
             <td className="border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
                 <input 
                     type="number"
-                    className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                     value={item.currentQuantity || ''}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -309,7 +309,7 @@ const BudgetItemRow = React.memo(({
                 <td className="border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
                     <input 
                         type="number"
-                        className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                        className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                         value={item.kFactor || 1}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -337,7 +337,7 @@ const BudgetItemRow = React.memo(({
                     <input 
                         autoFocus
                         type="number"
-                        className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                        className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                         value={item.unitPrice}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -378,7 +378,7 @@ const BudgetItemRow = React.memo(({
             <td className="border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
                 <textarea 
                     rows={1}
-                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-default focus:cursor-text selection:bg-blue-600 selection:text-white"
+                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
                     value={item.observations || ''}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -1148,6 +1148,16 @@ const App: React.FC = () => {
         return;
     }
     const { projectInfo } = state;
+
+    const formatDateDDMMYYYY = (dateString: string | undefined): string => {
+        if (!dateString) return '';
+        const parts = dateString.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+        return dateString;
+    };
+
     const isAveria = projectInfo.isAveria && projectInfo.certificationType === 'iberdrola';
     const isIberdrola = projectInfo.certificationType === 'iberdrola';
     const marginDivisor = type === 'proforma' && marginPercentage !== 0 ? (1 + marginPercentage / 100) : 1;
@@ -1164,7 +1174,7 @@ const App: React.FC = () => {
     doc.text("Palencia, CP: 33429", rightMargin, 24, { align: "right" });
     doc.text("CIF: A33020074", rightMargin, 28, { align: "right" });
     doc.setFont("helvetica", "bold").setTextColor(150).text("FECHA", rightMargin, 36, { align: "right" });
-    doc.setFontSize(12).setTextColor(0).text(new Date(projectInfo.date).toLocaleDateString(), rightMargin, 41, { align: "right" });
+    doc.setFontSize(12).setTextColor(0).text(formatDateDDMMYYYY(projectInfo.date), rightMargin, 41, { align: "right" });
     const title = type === 'proforma' 
         ? (isAveria ? "FACTURA PROFORMA (AVERÍA)" : "FACTURA PROFORMA") 
         : (isAveria ? "CERTIFICACIÓN DE OBRA (AVERÍA)" : "CERTIFICACIÓN DE OBRA");
@@ -1185,7 +1195,7 @@ const App: React.FC = () => {
         doc.setFontSize(10).setTextColor(153, 27, 27).setFont("helvetica", "bold").text("Nº AVERÍA:", margin, yPos);
         doc.setTextColor(0).setFont("helvetica", "normal").text(projectInfo.averiaNumber || '', margin + 22, yPos);
         doc.setTextColor(153, 27, 27).setFont("helvetica", "bold").text("FECHA AVERÍA:", margin + 55, yPos);
-        doc.setTextColor(0).setFont("helvetica", "normal").text(projectInfo.averiaDate ? new Date(projectInfo.averiaDate).toLocaleDateString() : '', margin + 83, yPos);
+        doc.setTextColor(0).setFont("helvetica", "normal").text(formatDateDDMMYYYY(projectInfo.averiaDate), margin + 83, yPos);
         doc.setTextColor(153, 27, 27).setFont("helvetica", "bold").text("HORARIO:", margin + 110, yPos);
         const horario = projectInfo.averiaTiming === 'nocturna_finde' ? 'Nocturna K=1,75' : 'Diurna K=1,25';
         doc.setTextColor(0).setFont("helvetica", "normal").text(horario, margin + 130, yPos);
@@ -1542,8 +1552,8 @@ const App: React.FC = () => {
                        <div className="col-span-12 bg-red-50 p-4 rounded border border-red-100 mt-2 animate-in fade-in slide-in-from-top-2 shadow-sm">
                            <div className="flex items-center gap-2 mb-3 text-red-800 font-bold uppercase text-sm border-b border-red-200 pb-1"><AlertTriangle className="w-4 h-4" /> Detalles de la Avería</div>
                            <div className="grid grid-cols-12 gap-6">
-                               <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><input type="text" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} /></div>
-                               <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><input type="date" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} /></div>
+                               <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Nº Avería</label><input type="text" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none focus:cursor-text" value={state.projectInfo.averiaNumber || ''} onChange={(e) => updateProjectInfo('averiaNumber', e.target.value)} /></div>
+                               <div className="col-span-2"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Fecha Avería</label><input type="date" className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none cursor-pointer" value={state.projectInfo.averiaDate || ''} onChange={(e) => updateProjectInfo('averiaDate', e.target.value)} /></div>
                                <div className="col-span-2">
                                    <label className="block text-xs font-bold text-red-600 uppercase mb-1 flex items-center gap-1">
                                        Horario 
@@ -1575,7 +1585,7 @@ const App: React.FC = () => {
                                    </label>
                                    <select className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none" value={state.projectInfo.averiaTiming || 'diurna'} onChange={(e) => updateProjectInfo('averiaTiming', e.target.value)}><option value="diurna">Diurna K=1,25</option><option value="nocturna_finde">Nocturna K=1,75</option></select>
                                </div>
-                               <div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><textarea rows={2} className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none resize-none" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} /></div>
+                               <div className="col-span-6"><label className="block text-xs font-bold text-red-600 uppercase mb-1">Descripción</label><textarea rows={2} className="w-full px-3 py-2 bg-white border border-red-200 rounded text-red-900 focus:outline-none resize-none focus:cursor-text" value={state.projectInfo.averiaDescription || ''} onChange={(e) => updateProjectInfo('averiaDescription', e.target.value)} /></div>
                            </div>
                        </div>
                      )}
