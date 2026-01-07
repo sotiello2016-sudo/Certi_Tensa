@@ -49,7 +49,10 @@ import {
   Type,
   User,
   FlaskConical,
-  Binary
+  Binary,
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -105,6 +108,7 @@ interface RowProps {
     certificationType: CertificationType;
     activeSearch: { rowId: string, field: 'code' | 'description' } | null;
     editingCell: { rowId: string, field: string } | null;
+    activeSearchCell?: {rowIndex: number, field: keyof BudgetItem, rowId: string};
     masterItems: BudgetItem[];
     onToggleCheck: (id: string) => void;
     onSetSelectedRow: (id: string) => void;
@@ -128,7 +132,7 @@ interface RowProps {
 
 const BudgetItemRow = React.memo(({
     item, index, isChecked, isSelected, isInSelection, isAveria, certificationType, 
-    activeSearch, editingCell, masterItems,
+    activeSearch, editingCell, activeSearchCell, masterItems,
     onToggleCheck, onSetSelectedRow, onDragStart, onDragOver, onDragEnd, onDrop,
     onUpdateField, onUpdateQuantity, onFillRow, onAddEmpty, onDelete,
     onSetActiveSearch, onSetEditingCell, onCellMouseDown, onCellMouseEnter,
@@ -169,9 +173,24 @@ const BudgetItemRow = React.memo(({
     const searchResults = (certificationType === 'iberdrola' && activeSearch?.rowId === item.id && (item.code.length > 0 || item.description.length > 1))
         ? getInlineSearchResults(activeSearch.field === 'code' ? item.code : item.description)
         : [];
+    
+    const getHighlightClass = (field: keyof BudgetItem) => {
+        if (activeSearchCell?.rowId === item.id && activeSearchCell?.field === field) {
+            return 'ring-4 ring-green-600 ring-inset relative z-10';
+        }
+        return '';
+    };
+
+    const getHighlightInputClass = (field: keyof BudgetItem) => {
+         if (activeSearchCell?.rowId === item.id && activeSearchCell?.field === field) {
+            return 'placeholder-slate-400 selection:bg-green-200 caret-black';
+        }
+        return 'selection:bg-blue-600 selection:text-white caret-black';
+    }
 
     return (
         <tr 
+            data-row-id={item.id}
             className={`group cursor-default transition-colors ${
                 isSelected ? 'bg-blue-100 border-blue-200' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
             }`}
@@ -191,7 +210,7 @@ const BudgetItemRow = React.memo(({
             </td>
 
             <td 
-                className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 cursor-move hover:text-slate-600 active:text-slate-800 ${isSelected ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
+                className={`border-r border-slate-300 text-center text-base text-slate-400 select-none align-top pt-4 grab-handle hover:text-slate-600 active:text-slate-800 ${isSelected ? 'bg-blue-200 text-blue-700 font-bold' : 'bg-slate-100'}`}
                 draggable={true}
                 onDragStart={(e) => onDragStart(e, index)}
                 onDragOver={onDragOver}
@@ -203,10 +222,10 @@ const BudgetItemRow = React.memo(({
             </td>
 
             {certificationType === 'iberdrola' && (
-                <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <td className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('code')}`}>
                     <textarea 
                         rows={1}
-                        className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                        className={`w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none font-sans text-base text-slate-800 focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 ${getHighlightInputClass('code')}`}
                         value={item.code}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -246,10 +265,10 @@ const BudgetItemRow = React.memo(({
                 </td>
             )}
 
-            <td className="border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+            <td className={`border-r border-slate-200 p-0 relative align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('description')}`}>
                 <textarea 
                     rows={1}
-                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                    className={`w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none text-justify resize-none overflow-hidden leading-relaxed relative z-0 ${getHighlightInputClass('description')}`}
                     value={item.description}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -287,10 +306,10 @@ const BudgetItemRow = React.memo(({
                 )}
             </td>
 
-            <td className="border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+            <td className={`border-r border-slate-200 p-0 relative bg-yellow-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('currentQuantity')}`}>
                 <input 
                     type="number"
-                    className="w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                    className={`w-full px-3 py-3 text-center font-sans text-base text-slate-800 bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 ${getHighlightInputClass('currentQuantity')}`}
                     value={item.currentQuantity || ''}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -306,10 +325,10 @@ const BudgetItemRow = React.memo(({
             </td>
 
             {isAveria && certificationType === 'iberdrola' && (
-                <td className="border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+                <td className={`border-r border-slate-200 p-0 relative bg-red-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('kFactor')}`}>
                     <input 
                         type="number"
-                        className="w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                        className={`w-full px-3 py-3 text-center font-sans text-base text-red-700 font-bold bg-transparent focus:bg-transparent focus:outline-none outline-none tabular-nums relative z-0 ${getHighlightInputClass('kFactor')}`}
                         value={item.kFactor || 1}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -326,7 +345,7 @@ const BudgetItemRow = React.memo(({
             )}
 
             <td 
-                className="border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20"
+                className={`border-r border-slate-200 p-0 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('unitPrice')}`}
                 onClick={() => {
                     if (editingCell?.rowId !== item.id || editingCell?.field !== 'unitPrice') {
                         onSetEditingCell({ rowId: item.id, field: 'unitPrice' });
@@ -337,7 +356,7 @@ const BudgetItemRow = React.memo(({
                     <input 
                         autoFocus
                         type="number"
-                        className="w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                        className={`w-full px-3 py-3 text-right bg-transparent outline-none font-sans text-base text-slate-800 focus:outline-none tabular-nums relative z-20 ${getHighlightInputClass('unitPrice')}`}
                         value={item.unitPrice}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -351,7 +370,7 @@ const BudgetItemRow = React.memo(({
                     />
                 ) : (
                     <div 
-                        className="w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default outline-none"
+                        className={`w-full h-full px-3 py-3 text-right font-sans text-base text-slate-800 tabular-nums cursor-default outline-none ${getHighlightInputClass('unitPrice')}`}
                         tabIndex={0}
                         draggable={false}
                         onDragStart={preventDrag}
@@ -363,7 +382,7 @@ const BudgetItemRow = React.memo(({
             </td>
 
             <td 
-                className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums cursor-cell select-none ${
+                className={`px-3 py-3 text-right font-sans text-base border-r border-slate-200 align-top tabular-nums selectable-cell select-none ${
                     isInSelection 
                         ? 'bg-blue-600 text-white font-bold' 
                         : effectiveTotal === 0 ? 'bg-red-100 text-red-600 font-medium' : 'text-slate-800 bg-slate-50/50'
@@ -375,10 +394,10 @@ const BudgetItemRow = React.memo(({
                 {formatCurrency(effectiveTotal)}
             </td>
 
-            <td className="border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20">
+            <td className={`border-r border-slate-200 p-0 bg-slate-50/30 align-top focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-500 focus-within:z-20 ${getHighlightClass('observations')}`}>
                 <textarea 
                     rows={1}
-                    className="w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 caret-black cursor-text selection:bg-blue-600 selection:text-white"
+                    className={`w-full h-full min-h-[56px] px-3 py-3 bg-transparent outline-none text-base text-slate-800 font-sans focus:bg-transparent focus:outline-none placeholder-slate-300 text-justify resize-none overflow-hidden leading-relaxed relative z-0 ${getHighlightInputClass('observations')}`}
                     value={item.observations || ''}
                     draggable={false}
                     onDragStart={preventDrag}
@@ -430,6 +449,11 @@ const BudgetItemRow = React.memo(({
     if (prev.isInSelection !== next.isInSelection) return false;
     if (prev.isAveria !== next.isAveria) return false;
     if (prev.certificationType !== next.certificationType) return false;
+    if (prev.activeSearchCell !== next.activeSearchCell) {
+      if (prev.activeSearchCell?.rowId === prev.item.id || next.activeSearchCell?.rowId === next.item.id) {
+        return false;
+      }
+    }
     
     const prevEdit = prev.editingCell;
     const nextEdit = next.editingCell;
@@ -786,6 +810,12 @@ const App: React.FC = () => {
   const [activeSearch, setActiveSearch] = useState<{ rowId: string, field: 'code' | 'description' } | null>(null);
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
 
+  // --- General Search State ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{rowIndex: number, field: keyof BudgetItem, rowId: string}[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (!isAccessAllowed) return; 
@@ -881,6 +911,20 @@ const App: React.FC = () => {
         setTimeout(() => marginInputRef.current?.select(), 50);
     }
   }, [showProformaDialog]);
+
+  // --- General Search Scroll Effect ---
+  useEffect(() => {
+    if (currentMatchIndex > -1 && searchResults[currentMatchIndex]) {
+        const { rowId } = searchResults[currentMatchIndex];
+        const rowElement = tableContainerRef.current?.querySelector(`tr[data-row-id="${rowId}"]`);
+        if (rowElement) {
+            rowElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+        }
+    }
+  }, [currentMatchIndex, searchResults]);
 
   const saveHistory = (currentState: AppState) => {
       if (!currentState) return;
@@ -1407,6 +1451,68 @@ const App: React.FC = () => {
       autoScrollSpeed.current = 0;
   }, []);
 
+  const goToPreviousMatch = () => {
+    if (searchResults.length > 0) {
+        setCurrentMatchIndex(prev => (prev - 1 + searchResults.length) % searchResults.length);
+    }
+  };
+
+  const startOrContinueSearch = () => {
+    const currentQuery = searchQuery.trim().toLowerCase();
+
+    if (!currentQuery) {
+      setSearchResults([]);
+      setCurrentMatchIndex(-1);
+      setLastSearchedQuery('');
+      return;
+    }
+
+    // Always perform a fresh search to get an updated count
+    const results: { rowIndex: number; field: keyof BudgetItem; rowId: string }[] = [];
+    const searchableFields: (keyof BudgetItem)[] = ['code', 'description', 'currentQuantity', 'kFactor', 'unitPrice', 'observations'];
+    state.items.forEach((item, index) => {
+      for (const field of searchableFields) {
+        const value = item[field];
+        if (value !== null && value !== undefined && String(value).toLowerCase().includes(currentQuery)) {
+          results.push({ rowIndex: index, field, rowId: item.id });
+        }
+      }
+    });
+
+    let nextIndex;
+    if (results.length === 0) {
+      // No results found
+      nextIndex = -1;
+    } else if (currentQuery !== lastSearchedQuery) {
+      // It's a brand new search term, so start from the first result
+      nextIndex = 0;
+    } else {
+      // It's a repeated search (user wants the next item), so advance the index
+      nextIndex = (currentMatchIndex + 1) % results.length;
+    }
+    
+    // Update all state variables based on the new search
+    setSearchResults(results);
+    setCurrentMatchIndex(nextIndex);
+    setLastSearchedQuery(currentQuery);
+  };
+
+  const handleSearchQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newQuery = e.target.value;
+    setSearchQuery(newQuery);
+    if (newQuery.trim() === '') {
+        setSearchResults([]);
+        setCurrentMatchIndex(-1);
+        setLastSearchedQuery('');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      startOrContinueSearch();
+    }
+  };
+
   const selectedSum = useMemo(() => {
       let sum = 0;
       selectedCellIndices.forEach(index => {
@@ -1470,6 +1576,7 @@ const App: React.FC = () => {
   if (!state) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">Cargando aplicación...</div>;
 
   const isIberdrola = state.projectInfo.certificationType === 'iberdrola';
+  const activeSearchCell = searchResults[currentMatchIndex];
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
@@ -1597,7 +1704,47 @@ const App: React.FC = () => {
         {isAccessAllowed ? (
             <div className="flex flex-col h-full bg-white relative">
               <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300 bg-slate-50 sticky top-0 z-20 h-12 shrink-0">
-                 <div className="relative group"></div>
+                 <div className="flex items-center gap-2">
+                     <div className="relative">
+                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                         <input
+                             type="text"
+                             placeholder="Buscar en tabla... (Intro para buscar)"
+                             className={`border border-slate-300 rounded-md pl-9 pr-4 py-1.5 w-72 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all ${searchQuery ? 'bg-yellow-100' : 'bg-white'}`}
+                             value={searchQuery}
+                             onChange={handleSearchQueryChange}
+                             onKeyDown={handleSearchKeyDown}
+                         />
+                     </div>
+                     <button
+                        onClick={goToPreviousMatch}
+                        disabled={searchResults.length === 0}
+                        className="p-1.5 bg-white border border-slate-300 rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Resultado anterior"
+                     >
+                        <ChevronLeft className="w-4 h-4" />
+                     </button>
+                    <button
+                        onClick={startOrContinueSearch}
+                        disabled={!searchQuery.trim()}
+                        className="p-1.5 bg-white border border-slate-300 rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Iniciar búsqueda o ir al resultado siguiente"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                     {lastSearchedQuery && searchResults.length > 0 && (
+                         <div className="text-sm font-semibold text-slate-600 bg-slate-200 px-3 py-1.5 rounded-md tabular-nums">
+                             <span className="font-bold text-slate-800">{currentMatchIndex + 1}</span>
+                             <span className="mx-1 text-slate-400">/</span>
+                             <span>{searchResults.length}</span>
+                         </div>
+                     )}
+                     {lastSearchedQuery && searchResults.length === 0 && (
+                        <div className="text-sm font-medium text-red-700 bg-red-100 px-3 py-1.5 rounded-md">
+                            Sin resultados
+                        </div>
+                     )}
+                 </div>
               </div>
               <div ref={tableContainerRef} className="flex-1 overflow-auto relative bg-slate-100/50">
                 <table className="w-full border-collapse text-base table-fixed min-w-[1050px] bg-white select-none">
@@ -1617,7 +1764,7 @@ const App: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {state.items.map((item, index) => (
-                        <BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria && isIberdrola} certificationType={state.projectInfo.certificationType} activeSearch={activeSearch} editingCell={editingCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />
+                        <BudgetItemRow key={item.id} item={item} index={index} isChecked={state.checkedRowIds.has(item.id)} isSelected={selectedRowId === item.id} isInSelection={selectedCellIndices.has(index)} isAveria={!!state.projectInfo.isAveria && isIberdrola} certificationType={state.projectInfo.certificationType} activeSearch={activeSearch} editingCell={editingCell} activeSearchCell={activeSearchCell} masterItems={state.masterItems} onToggleCheck={toggleRowCheck} onSetSelectedRow={setSelectedRowId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} onUpdateField={updateField} onUpdateQuantity={updateQuantity} onFillRow={fillRowWithMaster} onAddEmpty={addEmptyItem} onDelete={deleteItem} onSetActiveSearch={setActiveSearch} onSetEditingCell={setEditingCell} onCellMouseDown={handleCellMouseDown} onCellMouseEnter={handleCellMouseEnter} onInputFocus={handleInputFocus} onInputBlur={handleInputBlur} dropdownRef={dropdownRef} />
                     ))}
                   </tbody>
                 </table>

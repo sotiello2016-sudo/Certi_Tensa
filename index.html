@@ -8,6 +8,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
+
+        /* --- Custom Cursors for Visibility & Size --- */
+        /* Replaces default system cursors with smaller, custom dark gray SVG versions for high visibility. */
+        /* Applied globally to relevant element types for consistent UX. */
+
+        /* Text input cursor */
+        textarea,
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        input[type="date"] {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path stroke='%234A4A4A' stroke-width='2' d='M16 8 V24 M13 8 H19 M13 24 H19'/></svg>") 16 16, text;
+        }
+
+        /* Cell selection cursor */
+        .selectable-cell {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path stroke='%234A4A4A' stroke-width='2.5' d='M16 8 V24 M8 16 H24'/></svg>") 16 16, cell;
+        }
+
+        /* Move/drag cursor */
+        .grab-handle {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path stroke='%234A4A4A' stroke-width='2' fill='none' d='M16,8 L16,24 M8,16 L24,16 M16,8 L13,11 M16,8 L19,11 M16,24 L13,21 M16,24 L19,21 M8,16 L11,13 M8,16 L11,19 M24,16 L21,13 M24,16 L21,19' /></svg>") 16 16, move;
+        }
     </style>
 <script type="importmap">
 {
